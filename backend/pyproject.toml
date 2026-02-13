@@ -1,0 +1,22 @@
+[project]
+name = "tensi-trossen-studio"
+version = "0.1.0"
+description = "TENSI Trossen Studio - Web GUI for LeRobot Trossen"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.32.0",
+    "pydantic>=2.0.0",
+    "pyrealsense2>=2.54.0",
+    "opencv-python-headless>=4.8.0",
+    "numpy>=1.24.0",
+    "requests>=2.31.0",
+    "httpx>=0.24.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]

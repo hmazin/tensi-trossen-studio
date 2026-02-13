@@ -1,0 +1,42 @@
+{
+  "robot": {
+    "leader_ip": "192.168.1.2",
+    "follower_ip": "192.168.1.5",
+    "cameras": {
+      "wrist": {
+        "type": "intelrealsense",
+        "serial_number_or_name": "218622275782",
+        "width": 640,
+        "height": 480,
+        "fps": 30
+      },
+      "top": {
+        "type": "intelrealsense",
+        "serial_number_or_name": "218622278263",
+        "width": 640,
+        "height": 480,
+        "fps": 30
+      }
+    }
+  },
+  "dataset": {
+    "repo_id": "tensi/test_dataset",
+    "num_episodes": 10,
+    "episode_time_s": 45,
+    "reset_time_s": 15,
+    "single_task": "Grab the cube",
+    "push_to_hub": false
+  },
+  "train": {
+    "dataset_repo_id": "tensi/test_dataset",
+    "policy_type": "act",
+    "output_dir": "outputs/train/act_trossen",
+    "job_name": "act_trossen",
+    "policy_repo_id": "tensi/my_policy"
+  },
+  "replay": {
+    "repo_id": "tensi/test_dataset",
+    "episode": 0
+  },
+  "lerobot_trossen_path": "/home/tensi/lerobot_trossen"
+}
