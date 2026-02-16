@@ -1,0 +1,29 @@
+[Unit]
+Description=TENSI Trossen Studio Backend (PC1 - Leader Side)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tensi
+Group=tensi
+WorkingDirectory=/home/tensi/tensi-trossen-studio/backend
+
+# Environment variables - update CAMERA_SERVICE_URL for your network
+Environment="PATH=/home/tensi/.local/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="CAMERA_SERVICE_URL=http://192.168.1.5:8001"
+
+# Run the main backend
+ExecStart=/usr/bin/uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+# Restart on failure
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tensi-backend
+
+[Install]
+WantedBy=multi-user.target

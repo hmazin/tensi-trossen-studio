@@ -50,6 +50,22 @@ class RobotConfig(BaseModel):
             },
         },
     )
+    remote_leader: bool = Field(
+        description="Enable remote leader mode: leader runs on a separate PC with leader_service.py",
+        default=False,
+    )
+    remote_leader_host: str = Field(
+        description="IP/hostname of the PC running leader_service.py (e.g., PC2's WiFi IP)",
+        default="192.168.2.138",
+    )
+    remote_leader_port: int = Field(
+        description="TCP port of the leader service",
+        default=5555,
+    )
+    remote_leader_ssh_user: str = Field(
+        description="SSH username for the PC running the leader service",
+        default="hadi",
+    )
     camera_service_url: str | None = Field(
         description="URL of remote camera service (e.g., http://192.168.1.5:8001) for distributed setup",
         default=None,

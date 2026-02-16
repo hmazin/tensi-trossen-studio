@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
+import { StatusBar } from './components/StatusBar'
 import { ActionPanel } from './components/ActionPanel'
 import { CameraViewer } from './components/CameraViewer'
 import { ConfigForm } from './components/ConfigForm'
@@ -15,6 +16,7 @@ function App() {
     logs: [],
     error: null,
   })
+  const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
     getConfig().then(setConfig).catch(() => {})
@@ -34,29 +36,52 @@ function App() {
   }, [refreshStatus])
 
   useEffect(() => {
-    if (!status.running) return
-    const id = setInterval(refreshStatus, 1500)
+    const id = setInterval(refreshStatus, status.running ? 1500 : 3000)
     return () => clearInterval(id)
   }, [status.running, refreshStatus])
 
   return (
-    <div className="min-h-screen bg-gray-900 p-6">
-      <header className="mb-8">
-        <h1 className="text-3xl font-bold text-white">TENSI Trossen Studio</h1>
-        <p className="mt-1 text-gray-400">
-          Web GUI for LeRobot Trossen — teleoperation, recording, training, replay
-        </p>
-      </header>
-      <div className="space-y-6">
-        <ConfigForm config={config} onConfigChange={setConfig} />
-        <ActionPanel
-          config={config}
-          status={status}
-          onAction={refreshStatus}
-        />
-        <CameraViewer config={config} status={status} />
-        <ProcessLog status={status} />
+    <div className="flex h-screen flex-col bg-gray-950">
+      <StatusBar
+        config={config}
+        status={status}
+        onSettingsClick={() => setSettingsOpen(true)}
+      />
+
+      <div className="flex flex-1 overflow-hidden">
+        {/* Main content area */}
+        <div className="flex flex-1 flex-col overflow-y-auto">
+          {/* Top: cameras + actions side by side */}
+          <div className="grid flex-1 grid-cols-1 gap-4 p-4 lg:grid-cols-5">
+            {/* Camera feeds - takes more space */}
+            <div className="lg:col-span-3">
+              <CameraViewer config={config} status={status} />
+            </div>
+
+            {/* Actions panel */}
+            <div className="lg:col-span-2">
+              <ActionPanel
+                config={config}
+                status={status}
+                onAction={refreshStatus}
+              />
+            </div>
+          </div>
+
+          {/* Bottom: process log full width */}
+          <div className="px-4 pb-4">
+            <ProcessLog status={status} />
+          </div>
+        </div>
       </div>
+
+      {/* Settings drawer */}
+      <ConfigForm
+        config={config}
+        onConfigChange={setConfig}
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+      />
     </div>
   )
 }

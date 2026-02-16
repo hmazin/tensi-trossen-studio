@@ -1,0 +1,28 @@
+[Unit]
+Description=TENSI Trossen Camera Service (PC2 - Follower Side)
+After=network.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tensi
+Group=tensi
+WorkingDirectory=/home/tensi/tensi-trossen-studio/backend
+
+# Environment variables
+Environment="PATH=/home/tensi/.local/bin:/usr/local/bin:/usr/bin:/bin"
+
+# Run the camera service
+ExecStart=/usr/bin/uv run uvicorn camera_service:app --host 0.0.0.0 --port 8001
+
+# Restart on failure
+Restart=always
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=tensi-camera
+
+[Install]
+WantedBy=multi-user.target

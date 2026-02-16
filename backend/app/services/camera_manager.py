@@ -263,6 +263,22 @@ class CameraManager:
                     cls._instance = CameraManager()
         return cls._instance
 
+    @staticmethod
+    def _hardware_reset_device(serial: str) -> None:
+        """Hardware-reset a specific RealSense device by serial number."""
+        if not HAS_REALSENSE:
+            return
+        try:
+            ctx = rs.context()
+            for dev in ctx.query_devices():
+                if dev.get_info(rs.camera_info.serial_number) == serial:
+                    dev.hardware_reset()
+                    logger.info(f"Hardware-reset RealSense {serial}")
+                    time.sleep(3)
+                    return
+        except Exception as e:
+            logger.warning(f"Hardware reset failed for {serial}: {e}")
+
     def initialize_camera(
         self,
         key: str,
@@ -286,6 +302,9 @@ class CameraManager:
                 logger.info(f"Camera {key} already exists, stopping old instance")
                 self.cameras[key].stop()
                 del self.cameras[key]
+
+            # Hardware-reset the device to clear stale USB state
+            self._hardware_reset_device(serial)
 
             # Create and start new camera
             camera = ManagedCamera(key, serial, width, height, fps)

@@ -7,7 +7,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import load_config
-from app.routes import config_routes, process_routes, camera_routes
+from app.routes import config_routes, process_routes, camera_routes, leader_service_routes
 from app.services.camera_manager import CameraManager
 
 
@@ -47,6 +47,7 @@ app.add_middleware(
 app.include_router(config_routes.router, prefix="/api/config")
 app.include_router(process_routes.router)
 app.include_router(camera_routes.router)
+app.include_router(leader_service_routes.router)
 
 
 @app.get("/")

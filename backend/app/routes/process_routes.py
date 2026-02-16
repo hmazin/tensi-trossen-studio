@@ -14,10 +14,31 @@ router = APIRouter(prefix="/api", tags=["process"])
 logger = logging.getLogger(__name__)
 
 
+def _reset_realsense_cameras() -> None:
+    """Hardware-reset RealSense cameras so lerobot gets a clean connection."""
+    try:
+        import pyrealsense2 as rs
+        import time
+        ctx = rs.context()
+        devices = ctx.query_devices()
+        if len(devices) == 0:
+            return
+        for dev in devices:
+            sn = dev.get_info(rs.camera_info.serial_number)
+            dev.hardware_reset()
+            logger.info(f"Hardware-reset RealSense {sn}")
+        time.sleep(3)
+    except Exception as e:
+        logger.warning(f"Camera reset failed (non-fatal): {e}")
+
+
 def _shutdown_cameras_for_process() -> None:
     """Shutdown local and/or remote cameras before starting a process that needs them."""
     # Shutdown local cameras
     CameraManager.get_instance().shutdown_all()
+
+    # Hardware-reset RealSense cameras to avoid stale state
+    _reset_realsense_cameras()
     
     # If remote camera service is configured, shutdown remote cameras
     camera_service_url = os.getenv("CAMERA_SERVICE_URL")
@@ -43,7 +64,12 @@ def _robot_config(use_top_camera_only: bool | None = None) -> dict:
     if use_top_only and "top" in cameras:
         # Pass top camera as "wrist" key - widowxai_follower may expect wrist slot
         cameras = {"wrist": cameras["top"]}
-    return {"leader_ip": cfg.robot.leader_ip, "follower_ip": cfg.robot.follower_ip, "cameras": cameras}
+    result = {"leader_ip": cfg.robot.leader_ip, "follower_ip": cfg.robot.follower_ip, "cameras": cameras}
+    if cfg.robot.remote_leader:
+        result["remote_leader"] = True
+        result["remote_leader_host"] = cfg.robot.remote_leader_host
+        result["remote_leader_port"] = cfg.robot.remote_leader_port
+    return result
 
 
 def _dataset_config() -> dict:

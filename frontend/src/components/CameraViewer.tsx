@@ -43,10 +43,10 @@ export function CameraViewer({ config, status }: CameraViewerProps) {
 
   if (cameraKeys.length === 0) {
     return (
-      <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
-        <h2 className="mb-4 text-lg font-semibold text-white">Camera Feed</h2>
-        <p className="text-sm text-gray-400">
-          Add cameras in Configuration (wrist and top serials) to see feeds.
+      <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4">
+        <h2 className="mb-4 text-sm font-semibold text-gray-300">Camera Feed</h2>
+        <p className="text-sm text-gray-500">
+          Add cameras in Settings (wrist and top serials) to see feeds.
         </p>
       </div>
     )
@@ -61,14 +61,19 @@ export function CameraViewer({ config, status }: CameraViewerProps) {
   }
 
   return (
-    <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-4">
+    <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-lg font-semibold text-white">Camera Feed</h2>
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="m15.75 10.5 4.72-4.72a.75.75 0 0 1 1.28.53v11.38a.75.75 0 0 1-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 0 0 2.25-2.25v-9a2.25 2.25 0 0 0-2.25-2.25h-9A2.25 2.25 0 0 0 2.25 7.5v9a2.25 2.25 0 0 0 2.25 2.25Z" />
+          </svg>
+          <h2 className="text-sm font-semibold text-gray-300">Camera Feed</h2>
+        </div>
         <button
           type="button"
           onClick={runDiagnostics}
           disabled={diagnosticsLoading}
-          className="rounded bg-gray-600 px-3 py-1 text-sm text-gray-200 hover:bg-gray-500 disabled:opacity-50"
+          className="rounded-lg border border-gray-600 bg-gray-700/50 px-3 py-1 text-xs text-gray-400 hover:bg-gray-600 hover:text-white disabled:opacity-50"
         >
           {diagnosticsLoading ? 'Checking…' : 'Detect cameras'}
         </button>

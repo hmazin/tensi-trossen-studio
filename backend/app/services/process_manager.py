@@ -98,6 +98,20 @@ class ProcessManager:
         # #region agent log
         _debug_log("process_manager.py:start_teleoperate", "teleoperate params", {"cameras_keys": list(cameras.keys()), "cameras_json_len": len(json.dumps(cameras))}, "H2")
         # #endregion
+        is_remote = robot_config.get("remote_leader", False)
+        if is_remote:
+            teleop_args = [
+                "--teleop.type=remote_leader_teleop",
+                f"--teleop.host={robot_config.get('remote_leader_host', '192.168.2.138')}",
+                f"--teleop.port={robot_config.get('remote_leader_port', 5555)}",
+                "--teleop.id=leader",
+            ]
+        else:
+            teleop_args = [
+                "--teleop.type=widowxai_leader_teleop",
+                f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
+                "--teleop.id=leader",
+            ]
         cmd = [
             "uv",
             "run",
@@ -106,9 +120,7 @@ class ProcessManager:
             f"--robot.ip_address={robot_config.get('follower_ip', '192.168.1.5')}",
             "--robot.id=follower",
             f"--robot.cameras={json.dumps(cameras)}",
-            "--teleop.type=widowxai_leader_teleop",
-            f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
-            "--teleop.id=leader",
+            *teleop_args,
             f"--display_data={str(display_data).lower()}",
         ]
         self._spawn(cmd, ProcessMode.TELEOPERATE)
@@ -122,6 +134,20 @@ class ProcessManager:
         """Start lerobot-record subprocess."""
         self.stop()
         cameras = robot_config.get("cameras", {})
+        is_remote = robot_config.get("remote_leader", False)
+        if is_remote:
+            teleop_args = [
+                "--teleop.type=remote_leader_teleop",
+                f"--teleop.host={robot_config.get('remote_leader_host', '192.168.2.138')}",
+                f"--teleop.port={robot_config.get('remote_leader_port', 5555)}",
+                "--teleop.id=leader",
+            ]
+        else:
+            teleop_args = [
+                "--teleop.type=widowxai_leader_teleop",
+                f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
+                "--teleop.id=leader",
+            ]
         cmd = [
             "uv",
             "run",
@@ -130,9 +156,7 @@ class ProcessManager:
             f"--robot.ip_address={robot_config.get('follower_ip', '192.168.1.5')}",
             "--robot.id=follower",
             f"--robot.cameras={json.dumps(cameras)}",
-            "--teleop.type=widowxai_leader_teleop",
-            f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
-            "--teleop.id=leader",
+            *teleop_args,
             f"--display_data={str(display_data).lower()}",
             f"--dataset.repo_id={dataset_config.get('repo_id', 'tensi/test_dataset')}",
             f"--dataset.num_episodes={dataset_config.get('num_episodes', 10)}",
@@ -218,12 +242,22 @@ class ProcessManager:
             self._log_buffer.append(f"Error: {e}")
 
     def stop(self) -> None:
-        """Stop current process if running."""
+        """Stop current process if running.
+
+        Sends SIGINT first so lerobot's KeyboardInterrupt handler runs the
+        graceful disconnect (follower returns to staged → sleep position).
+        Allows up to 15 seconds for the robot to complete its shutdown
+        sequence before force-killing.
+        """
         if self._process and self._process.poll() is None:
-            self._process.terminate()
+            import signal
+
+            self._log_buffer.append("[Studio] Stopping — returning robots to rest position...")
+            self._process.send_signal(signal.SIGINT)
             try:
-                self._process.wait(timeout=5)
+                self._process.wait(timeout=15)
             except subprocess.TimeoutExpired:
+                self._log_buffer.append("[Studio] Graceful stop timed out, force killing.")
                 self._process.kill()
             self._log_buffer.append("[Studio] Process stopped.")
         self._process = None

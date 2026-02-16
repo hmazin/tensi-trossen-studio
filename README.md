@@ -1,353 +1,322 @@
 # TENSI Trossen Studio
 
-> **Web-based control interface for LeRobot Trossen robots with distributed teleoperation support**
+> Web-based control interface for LeRobot Trossen robots with distributed teleoperation support
 
-A comprehensive system for teleoperating, recording, training, and replaying Trossen robotic arms using LeRobot, featuring UDP-over-SSH tunneling for distributed multi-PC setups.
+A system for teleoperating, recording, training, and replaying Trossen WidowX AI robotic arms using [LeRobot](https://github.com/huggingface/lerobot). Supports distributed setups where leader and follower robots are on separate networks — different rooms, floors, or even cities.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+## Features
 
-## 🌟 Features
+- **Teleoperation** — Real-time leader-follower robot control, local or remote
+- **Recording** — Capture demonstration episodes with camera feeds
+- **Training** — Train ACT/Diffusion policies on collected data
+- **Replay** — Execute learned behaviors on the physical robot
+- **Camera streaming** — Live RealSense camera feeds in the web UI
+- **Distributed teleoperation** — Operate robots across PCs over WiFi or WAN
+- **Leader service management** — Start/stop the remote leader service from the web UI
+- **Web configuration** — All settings configurable through the browser
 
-### Core Functionality
-- 🎮 **Teleoperation** - Real-time leader-follower robot control
-- 📹 **Recording** - Capture demonstration episodes with camera feeds
-- 🧠 **Training** - Train AI policies on collected data
-- ▶️ **Replay** - Test learned behaviors on physical robots
-- 📷 **Camera Streaming** - Live RealSense camera feeds in web UI
+## Architecture
 
-### Advanced Features
-- 🌐 **Distributed Teleoperation** - Operate robots across multiple PCs over network
-- 🔒 **UDP-over-SSH Tunneling** - Secure robot communication through SSH
-- 🎥 **Camera Manager** - Conflict-free camera access between streaming and teleoperation
-- 🔧 **Web Configuration** - Easy setup through browser interface
-- 📊 **Real-time Monitoring** - Live process logs and status updates
+### Single PC
 
-## 📋 Table of Contents
+Both robots on the same Ethernet switch, everything runs on one machine.
 
-- [Quick Start (Single PC)](#quick-start-single-pc)
-- [Distributed Setup (Multi-PC)](#distributed-setup-multi-pc)
-- [Configuration](#configuration)
-- [Usage](#usage)
-- [Architecture](#architecture)
-- [Documentation](#documentation)
-- [Troubleshooting](#troubleshooting)
+```
+Browser → Frontend (React) → Backend (FastAPI) → lerobot-teleoperate → Robots
+```
 
-## 🚀 Quick Start (Single PC)
+### Distributed (two PCs)
+
+Leader and follower robots on separate PCs. A lightweight Leader Service on PC2 streams joint positions over TCP to PC1.
+
+```
+PC2 (Leader Side)                      PC1 (Follower Side)
+┌─────────────────────────┐            ┌─────────────────────────────┐
+│  Leader Robot            │            │  Follower Robot              │
+│  (192.168.1.2)           │            │  (192.168.1.5)               │
+│       │ Ethernet         │            │       │ Ethernet             │
+│  leader_service.py       │            │  lerobot-teleoperate         │
+│  TCP:5555 ───────────────┼── WiFi ──► │  + RemoteLeaderTeleop plugin │
+│  Streams 7 floats @60Hz  │   ~2KB/s  │                              │
+└─────────────────────────┘            │  Backend + Frontend + Cameras │
+                                       └─────────────────────────────┘
+```
+
+This works over WiFi (LAN) and WAN (internet via VPN) because it only needs a single TCP connection at ~2 KB/s, tolerating 50-200ms latency.
+
+## Quick Start
 
 ### Prerequisites
 
-- **lerobot_trossen**: Clone and install at `~/lerobot_trossen`. See [Trossen LeRobot docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin.html)
-- **uv**: Python package manager - [Install uv](https://docs.astral.sh/uv/getting-started/installation/)
-- **Node.js & npm**: For the frontend - [nodejs.org](https://nodejs.org/)
-- **RealSense cameras**: Connected via USB
-- **Trossen robots**: Leader and follower with iNerve controllers
+- **lerobot_trossen** — cloned and installed at `~/lerobot_trossen` ([Trossen docs](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin.html))
+- **uv** — Python package manager ([install](https://docs.astral.sh/uv/getting-started/installation/))
+- **Node.js 18+** and npm ([nodejs.org](https://nodejs.org/))
+- **Trossen WidowX AI robots** — leader and follower with iNerve controllers
+- **Intel RealSense cameras** (optional, for recording)
 
 ### Installation
 
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/hmazin/tensi-trossen-studio.git
-   cd tensi-trossen-studio
-   ```
+```bash
+git clone https://github.com/hmazin/tensi-trossen-studio.git
+cd tensi-trossen-studio
+```
 
-2. **Start the backend**
-   ```bash
-   cd backend
-   uv sync
-   uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+### Start the Backend
 
-3. **Start the frontend** (in a new terminal)
-   ```bash
-   cd frontend
-   npm install
-   npm run dev
-   ```
+```bash
+cd backend
+uv sync
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
 
-4. **Open in browser**
-   ```
-   http://localhost:5173
-   ```
+### Start the Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+### Open the UI
+
+```
+http://localhost:5173
+```
 
 ### First-Time Configuration
 
-1. Open the web UI
-2. Configure robot IPs (default: Leader `192.168.1.2`, Follower `192.168.1.5`)
-3. Set camera serial numbers (find with `uv run lerobot-find-cameras realsense`)
-4. Verify LeRobot Trossen path (default: `~/lerobot_trossen`)
-5. Click **Save Config**
+1. Click the gear icon (top-right) to open Settings
+2. Set **Follower IP** (default: `192.168.1.5`)
+3. For single-PC: set **Leader IP** (default: `192.168.1.2`)
+4. For distributed: enable **Remote Leader Mode** and set the host/port
+5. Configure camera serial numbers
+6. Click **Save Settings**
 
-## 🌐 Distributed Setup (Multi-PC)
+## Distributed Setup
 
-**Use case:** Operate leader and follower robots from separate computers connected via WiFi.
+For operating leader and follower robots on separate PCs.
 
-### Architecture Overview
+See the full guide: [deployment/REMOTE-LEADER-SETUP.md](deployment/REMOTE-LEADER-SETUP.md)
 
-```
-PC1 (Operator Station)          PC2 (Leader Robot Station)
-├─ Backend + Frontend          ├─ Leader Robot
-├─ Follower Robot              └─ UDP Relay (socat)
-├─ RealSense Cameras           
-└─ SSH Tunnel Client ─WiFi────> SSH Tunnel Server
-         UDP-over-SSH tunneling
-```
+### TL;DR
 
-### Prerequisites
-
-- **2 PCs** with WiFi and Ethernet
-- **2 NetGear switches** (one per PC)
-- **SSH access** between PCs
-- **socat** installed on both PCs
-
-### Quick Setup
-
-1. **Hardware Connection**
-   ```
-   PC1 Ethernet → NetGear 1 → Follower iNerve + Cameras
-   PC2 Ethernet → NetGear 2 → Leader iNerve
-   Both PCs connected via WiFi
-   ```
-
-2. **On PC1, start tunnels**
+1. Copy `leader_service.py` to PC2 (the leader robot's PC)
+2. Install `trossen_arm` on PC2
+3. Start the leader service on PC2:
    ```bash
-   cd tensi-trossen-studio
-   ./deployment/start-all-tunnels.sh
+   python3 -u ~/leader_service.py --ip 192.168.1.2 --port 5555 --fps 60
    ```
+   Or start it from the web UI (uses SSH under the hood).
+4. Enable **Remote Leader Mode** in the web UI Settings
+5. Click **Start Teleoperation**
 
-3. **Start backend and frontend** (same as single PC setup)
+## Configuration
 
-4. **Verify and test**
-   ```bash
-   ./deployment/test-setup.sh
-   ```
-
-### Documentation
-
-Complete distributed setup guide: [`deployment/SETUP-WITH-TWO-SWITCHES.md`](deployment/SETUP-WITH-TWO-SWITCHES.md)
-
-Quick reference: [`deployment/QUICK-START.md`](deployment/QUICK-START.md)
-
-Pre-flight checklist: [`deployment/PRE-FLIGHT-CHECKLIST.md`](deployment/PRE-FLIGHT-CHECKLIST.md)
-
-## ⚙️ Configuration
-
-Configuration is stored in `~/.tensi_trossen_studio/config.json` with the following structure:
+Configuration is stored at `~/.tensi_trossen_studio/config.json`:
 
 ```json
 {
   "robot": {
     "leader_ip": "192.168.1.2",
     "follower_ip": "192.168.1.5",
+    "remote_leader": true,
+    "remote_leader_host": "192.168.2.138",
+    "remote_leader_port": 5555,
+    "use_top_camera_only": true,
     "cameras": {
-      "wrist": { "serial_number_or_name": "218622275782" },
-      "top": { "serial_number_or_name": "218622278263" }
+      "wrist": { "type": "intelrealsense", "serial_number_or_name": "218622275782", "width": 640, "height": 480, "fps": 30 },
+      "top":   { "type": "intelrealsense", "serial_number_or_name": "218622278263", "width": 640, "height": 480, "fps": 30 }
     }
   },
   "dataset": {
-    "repo_id": "username/dataset_name",
-    "num_episodes": 10
+    "repo_id": "tensi/test_dataset",
+    "num_episodes": 10,
+    "episode_time_s": 45,
+    "single_task": "Grab the cube"
   },
   "lerobot_trossen_path": "/home/user/lerobot_trossen"
 }
 ```
 
-**For distributed setup**, set `leader_ip` to `127.0.0.1` to route through SSH tunnel.
+All fields are editable through the web UI Settings panel.
 
-## 📖 Usage
+## Usage
 
 ### Teleoperation
 
-1. Click **"Start Teleoperation"**
-2. Move the leader robot arm
-3. Follower robot mirrors movements
-4. Click **"Stop"** when done
+1. (If distributed) Start the leader service — either from the web UI or manually on PC2
+2. Click **Start Teleoperation**
+3. Move the leader arm — the follower mirrors in real-time
+4. Click **Stop** when done
 
-### Recording Episodes
+### Recording
 
-1. Set dataset name and number of episodes
-2. Define task description
-3. Click **"Start Recording"**
-4. Perform demonstrations
-5. Episodes saved to LeRobot dataset
+1. Set dataset name, number of episodes, and task description
+2. Click **Start Recording**
+3. Perform demonstrations — each episode is captured with camera frames
+4. Dataset is saved locally in LeRobot format
 
 ### Training
 
-1. Select dataset repository ID
-2. Configure policy type (ACT, Diffusion, etc.)
-3. Click **"Start Training"**
-4. Monitor training progress
+1. Enter the dataset repo ID
+2. Click **Start Training** — trains an ACT policy
+3. Monitor progress in the Process Log
 
 ### Replay
 
 1. Select dataset and episode number
-2. Click **"Start Replay"**
-3. Robot executes learned behavior
+2. Click **Start Replay** — the robot executes the recorded actions
 
-## 🏗️ Architecture
+## Testing
 
-### System Components
+The project has a comprehensive automated test suite covering backend and frontend, plus a manual hardware checklist.
 
-```
-┌─────────────────┐
-│   Web Browser   │
-└────────┬────────┘
-         │ HTTP
-┌────────▼────────┐
-│  Frontend (UI)  │  React + Vite + Tailwind
-└────────┬────────┘
-         │ REST API
-┌────────▼────────┐
-│ Backend (API)   │  FastAPI + uvicorn
-├─────────────────┤
-│ Camera Manager  │  Singleton pattern
-│ Process Manager │  Subprocess control
-│ Config Manager  │  Pydantic models
-└────────┬────────┘
-         │
-┌────────▼────────┐
-│  lerobot_trossen │  LeRobot CLI tools
-└─────────────────┘
-```
+### Run Backend Tests
 
-### Key Technologies
-
-- **Backend**: FastAPI, Python 3.12+, uvicorn
-- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
-- **Camera**: pyrealsense2, OpenCV
-- **Networking**: SSH tunneling, socat (for UDP-over-SSH)
-- **Robot Control**: LeRobot Trossen plugin
-
-### Camera Manager
-
-Singleton pattern ensures only one process accesses cameras at a time:
-- Automatically releases cameras before teleoperation
-- Restarts streaming after teleoperation ends
-- Thread-safe frame capture
-
-### UDP-over-SSH Tunneling
-
-For distributed setups, UDP robot communication is tunneled over SSH:
-
-```
-PC1: UDP:50000 → socat → TCP:15000 → SSH → PC2:TCP:15000 → socat → UDP:50000 → Robot
-```
-
-Technical details: [`deployment/UDP-ARCHITECTURE.md`](deployment/UDP-ARCHITECTURE.md)
-
-## 📚 Documentation
-
-### Setup Guides
-- [`deployment/SETUP-WITH-TWO-SWITCHES.md`](deployment/SETUP-WITH-TWO-SWITCHES.md) - Complete distributed setup
-- [`deployment/QUICK-START.md`](deployment/QUICK-START.md) - Quick reference
-- [`deployment/PRE-FLIGHT-CHECKLIST.md`](deployment/PRE-FLIGHT-CHECKLIST.md) - Testing checklist
-
-### Technical Documentation
-- [`deployment/UDP-ARCHITECTURE.md`](deployment/UDP-ARCHITECTURE.md) - UDP tunneling details
-- [`deployment/IMPLEMENTATION-SUMMARY.md`](deployment/IMPLEMENTATION-SUMMARY.md) - Technical implementation
-- [`deployment/README.md`](deployment/README.md) - Deployment overview
-
-### Scripts
-- `deployment/start-all-tunnels.sh` - Start distributed system
-- `deployment/stop-all-tunnels.sh` - Stop all processes
-- `deployment/test-setup.sh` - Verify configuration
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-**Camera shows "Camera unavailable"**
 ```bash
-# Check if another process is using cameras
-pgrep -af lerobot
-
-# Kill processes and restart backend
-pkill -f lerobot
+cd backend
+uv sync --extra test
+uv run pytest tests/ -v
 ```
 
-**Leader robot not responding (distributed setup)**
+68 tests covering config models, process manager CLI arg building, route helpers, leader service SSH logic, and full API integration.
+
+### Run Frontend Tests
+
 ```bash
-# Verify network connectivity
-ssh user@pc2 'ping -c 2 192.168.1.2'
-
-# Check tunnels are running
-./deployment/test-setup.sh
+cd frontend
+npm install
+npm test
 ```
 
-**iNerve controller shows red LED**
-- Power cycle the iNerve controller
-- Wait for green LED before attempting teleoperation
-- Ensure proper connection through network switch (not direct PC connection)
+46 tests covering the API client, and all 5 UI components (StatusBar, ActionPanel, ProcessLog, ConfigForm, CameraViewer).
 
-**SSH tunnel drops**
-```bash
-# Restart tunnels
-./deployment/stop-all-tunnels.sh
-./deployment/start-all-tunnels.sh
-```
+### Manual Hardware Tests
 
-### Logs
+See [docs/HARDWARE-TEST-CHECKLIST.md](docs/HARDWARE-TEST-CHECKLIST.md) for the structured checklist covering single-PC teleoperation, camera streaming, distributed leader service management, and graceful/unexpected disconnect scenarios.
 
-- **Backend logs**: Check terminal running uvicorn
-- **PC1 socat logs**: `/tmp/socat-pc1.log`
-- **PC2 socat logs**: `ssh user@pc2 'cat /tmp/socat.log'`
-
-## 🛠️ Project Structure
+## Project Structure
 
 ```
 tensi-trossen-studio/
-├── backend/                    # FastAPI backend
+├── backend/                        # FastAPI backend
 │   ├── app/
-│   │   ├── main.py            # Main application
-│   │   ├── config.py          # Configuration models
-│   │   ├── routes/            # API endpoints
-│   │   │   ├── camera_routes.py
-│   │   │   ├── process_routes.py
-│   │   │   └── config_routes.py
-│   │   └── services/          # Business logic
-│   │       ├── camera_manager.py
-│   │       └── process_manager.py
-│   ├── camera_service.py      # Standalone camera service
-│   └── pyproject.toml         # Python dependencies
-├── frontend/                   # React frontend
+│   │   ├── main.py                 # Application entry point
+│   │   ├── config.py               # Pydantic config models
+│   │   ├── routes/
+│   │   │   ├── config_routes.py    # GET/POST /api/config
+│   │   │   ├── process_routes.py   # Start/stop teleoperate, record, train, replay
+│   │   │   ├── camera_routes.py    # Camera streaming and detection
+│   │   │   └── leader_service_routes.py  # Remote leader start/stop/status via SSH
+│   │   └── services/
+│   │       ├── process_manager.py  # Subprocess lifecycle for lerobot CLI
+│   │       ├── camera_manager.py   # Singleton camera access manager
+│   │       └── camera_streamer.py  # MJPEG streaming
+│   ├── tests/                      # Backend test suite (pytest)
+│   │   ├── conftest.py             # Shared fixtures
+│   │   ├── test_config.py          # Config models + I/O
+│   │   ├── test_process_manager.py # CLI arg building, stop logic, singleton
+│   │   ├── test_route_helpers.py   # _robot_config, _dataset_config, etc.
+│   │   ├── test_leader_service_routes.py # SSH command logic
+│   │   └── test_api.py             # Full API integration (TestClient)
+│   └── pyproject.toml
+├── frontend/                       # React + TypeScript + Tailwind
+│   ├── vitest.config.ts            # Vitest test runner configuration
 │   ├── src/
-│   │   ├── App.tsx            # Main app component
-│   │   ├── api/               # API client
-│   │   └── components/        # React components
-│   ├── .env.development       # Local dev config
-│   ├── .env.production        # Distributed config
-│   └── package.json           # Node dependencies
-└── deployment/                 # Deployment scripts & docs
-    ├── start-all-tunnels.sh   # Start script
-    ├── stop-all-tunnels.sh    # Stop script
-    ├── test-setup.sh          # Verification script
-    └── *.md                   # Documentation
+│   │   ├── App.tsx                 # Dashboard layout
+│   │   ├── api/
+│   │   │   ├── client.ts           # REST API client
+│   │   │   └── client.test.ts      # API client unit tests
+│   │   └── components/
+│   │       ├── StatusBar.tsx        # Header with mode + connection indicators
+│   │       ├── StatusBar.test.tsx
+│   │       ├── ActionPanel.tsx      # Workflow cards + leader service control
+│   │       ├── ActionPanel.test.tsx
+│   │       ├── CameraViewer.tsx     # Live camera feed viewer
+│   │       ├── CameraViewer.test.tsx
+│   │       ├── ConfigForm.tsx       # Settings slide-over panel
+│   │       ├── ConfigForm.test.tsx
+│   │       ├── ProcessLog.tsx       # Real-time process output
+│   │       └── ProcessLog.test.tsx
+│   └── package.json
+├── deployment/                     # Deployment guides and scripts
+│   ├── REMOTE-LEADER-SETUP.md     # Distributed teleoperation guide
+│   ├── leader-service.service     # Systemd unit for leader service
+│   ├── start-leader-service.sh    # Start leader locally on PC2
+│   ├── start-remote-leader.sh     # Start leader on PC2 via SSH
+│   ├── tensi-backend.service      # Systemd unit for backend
+│   └── tensi-camera.service       # Systemd unit for camera service
+├── docs/
+│   ├── ARCHITECTURE.md            # System architecture deep-dive
+│   ├── HARDWARE-TEST-CHECKLIST.md # Manual hardware test checklist
+│   └── TROSSEN_LEROBOT_REFERENCE.md  # Trossen LeRobot plugin reference
+└── README.md
 ```
 
-## 📄 License
+## Technology Stack
 
-MIT License - See [LICENSE](LICENSE) file for details
+| Layer | Technology |
+|-------|-----------|
+| Backend | Python 3.10+, FastAPI, uvicorn, Pydantic |
+| Frontend | React 18, TypeScript, Vite, Tailwind CSS |
+| Backend testing | pytest, httpx, coverage |
+| Frontend testing | vitest, @testing-library/react, jsdom |
+| Cameras | pyrealsense2, OpenCV |
+| Robot control | LeRobot + Trossen plugin (`trossen_arm`) |
+| Networking | TCP sockets (leader service), SSH (remote management) |
+| Package management | uv (Python), npm (Node.js) |
 
-## 🤝 Contributing
+## Troubleshooting
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+### Camera shows "Camera unavailable"
 
-## 📧 Contact
+```bash
+# Check for stuck processes
+pgrep -af lerobot
+pkill -f lerobot
+# Restart the backend
+```
+
+### Leader iNerve LED is red
+
+- Power cycle the iNerve controller
+- Wait for the LED to turn green before retrying
+- The controller needs a network switch (direct PC connection does not work)
+
+### "Cannot reach Leader Service" (distributed)
+
+```bash
+# Check network
+ping 192.168.2.138
+
+# Check port
+nc -zv 192.168.2.138 5555
+
+# Check if leader_service.py is running on PC2
+ssh hadi@192.168.2.138 'ps aux | grep leader_service'
+
+# Check firewall
+ssh hadi@192.168.2.138 'sudo ufw allow 5555/tcp'
+```
+
+### Positions feel laggy (distributed)
+
+- Check WiFi latency: `ping <PC2_IP>` — under 50ms is ideal
+- For WAN: 50-100ms is normal and acceptable
+- Reduce FPS if bandwidth is limited: `--fps 30`
+
+## License
+
+MIT License
+
+## Contact
 
 - **Author**: Hooman
 - **Email**: hooman.mazin@gmail.com
 - **GitHub**: [@hmazin](https://github.com/hmazin)
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
 - [LeRobot](https://github.com/huggingface/lerobot) by Hugging Face
 - [Trossen Robotics](https://www.trossenrobotics.com/) for WidowX robotic arms
 - Intel RealSense SDK
-
-## 🔗 Related Projects
-
-- [lerobot_trossen](https://docs.trossenrobotics.com/trossen_arm/main/tutorials/lerobot_plugin.html) - Trossen plugin for LeRobot
-- [LeRobot](https://github.com/huggingface/lerobot) - Robot learning toolkit
-
----
-
-**⭐ Star this repo if you find it useful!**

@@ -1,0 +1,19 @@
+[Unit]
+Description=SSH Tunnel to Leader Robot on PC2
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tensi
+Restart=always
+RestartSec=10
+
+# Keep trying to establish tunnel
+ExecStart=/usr/bin/ssh -N -L 50001:192.168.1.2:50001 -o ServerAliveInterval=60 -o ServerAliveCountMax=3 -o ExitOnForwardFailure=yes hadi@192.168.2.138
+
+# Clean up on stop
+ExecStop=/usr/bin/pkill -f "ssh.*50001:192.168.1.2"
+
+[Install]
+WantedBy=multi-user.target

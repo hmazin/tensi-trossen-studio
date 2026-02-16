@@ -40,6 +40,9 @@ export interface AppConfig {
     leader_ip: string;
     follower_ip: string;
     use_top_camera_only?: boolean;
+    remote_leader?: boolean;
+    remote_leader_host?: string;
+    remote_leader_port?: number;
     cameras: Record<string, { type: string; serial_number_or_name: string; width: number; height: number; fps: number }>;
   };
   dataset: {
@@ -182,4 +185,28 @@ export async function getCameraStatus(): Promise<CameraStatusResult> {
 
 export async function shutdownCameras(): Promise<{ status: string; cameras_released: string[] }> {
   return fetchCameraApi('/cameras/shutdown', { method: 'POST' });
+}
+
+// Leader Service (remote PC2) management
+export interface LeaderServiceStatus {
+  status: 'running' | 'stopped' | 'unknown';
+  host?: string;
+  port?: number;
+}
+
+export async function getLeaderServiceStatus(): Promise<LeaderServiceStatus> {
+  return fetchApi('/leader-service/status');
+}
+
+export async function startLeaderService(): Promise<{ status: string; message?: string; host?: string; port?: number; pid?: string }> {
+  return fetchApi('/leader-service/start', { method: 'POST' });
+}
+
+export async function stopLeaderService(): Promise<{ status: string }> {
+  return fetchApi('/leader-service/stop', { method: 'POST' });
+}
+
+export async function getLeaderServiceLogs(lines?: number): Promise<{ logs: string[]; error?: string }> {
+  const params = lines ? `?lines=${lines}` : '';
+  return fetchApi(`/leader-service/logs${params}`);
 }

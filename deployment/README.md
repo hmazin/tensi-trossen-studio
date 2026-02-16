@@ -1,289 +1,99 @@
-# Deployment Documentation
+# Deployment
 
-This directory contains all documentation and scripts for deploying the distributed teleoperation system across two PCs.
+Scripts and documentation for deploying TENSI Trossen Studio, especially the distributed (two-PC) teleoperation setup.
 
-## Current Status
+## Current Architecture: Remote Leader
 
-**⏸️ READY FOR TESTING - Waiting for Hardware**
+The distributed system uses a **split architecture** where each robot has its own dedicated PC with a local Trossen driver. A lightweight TCP service streams joint positions between them.
 
-The distributed teleoperation system is fully implemented and ready for testing. Testing is blocked pending delivery of a second NetGear GS305E switch (ETA: 2 days from 2026-02-13).
-
-**What's Working:**
-- ✅ UDP-over-SSH tunneling infrastructure
-- ✅ Automated startup/shutdown scripts
-- ✅ Camera management system
-- ✅ Backend API and frontend UI
-- ✅ SSH authentication configured
-
-**What's Blocked:**
-- ⏸️ Leader robot connectivity (needs NetGear switch)
-
-## Quick Links
-
-### For Daily Use
-📋 **[PRE-FLIGHT-CHECKLIST.md](./PRE-FLIGHT-CHECKLIST.md)** - Step-by-step checklist for when the switch arrives
-
-📖 **[QUICK-START.md](./QUICK-START.md)** - Quick reference for starting/stopping the system
-
-### For Setup & Configuration
-🔧 **[SETUP-WITH-TWO-SWITCHES.md](./SETUP-WITH-TWO-SWITCHES.md)** - Complete setup guide
-
-📊 **[IMPLEMENTATION-SUMMARY.md](./IMPLEMENTATION-SUMMARY.md)** - What we built and why
-
-🌐 **[UDP-ARCHITECTURE.md](./UDP-ARCHITECTURE.md)** - Technical details of UDP tunneling
+Full guide: **[REMOTE-LEADER-SETUP.md](./REMOTE-LEADER-SETUP.md)**
 
 ## Scripts
 
-### Automated Control
-- **`start-all-tunnels.sh`** - Start all tunneling infrastructure (SSH + socat)
-- **`stop-all-tunnels.sh`** - Stop all tunnels and clean up processes
-- **`test-setup.sh`** - Verify system configuration
+### Leader Service (Distributed Setup)
 
-### Individual Components
-- **`ssh-tunnel-complete.sh`** - Create SSH tunnels (TCP + UDP wrapper)
-- **`setup-pc1-udp-wrapper.sh`** - Start UDP-to-TCP wrapper on PC1
-- **`setup-pc2-udp-relay.sh`** - Start TCP-to-UDP relay on PC2
+| Script | Run on | Purpose |
+|--------|--------|---------|
+| `start-leader-service.sh` | PC2 | Start `leader_service.py` locally |
+| `start-remote-leader.sh` | PC1 | Start leader service on PC2 via SSH |
 
-### Deployment Scripts
-- **`deploy-pc1.sh`** - Deploy backend/frontend on PC1 (unused in current setup)
-- **`deploy-pc2.sh`** - Deploy camera service on PC2 (unused in current setup)
+### Systemd Services
 
-## Documentation Overview
+| File | Install on | Purpose |
+|------|-----------|---------|
+| `leader-service.service` | PC2 | Auto-start the leader service on boot |
+| `tensi-backend.service` | PC1 | Auto-start the FastAPI backend on boot |
+| `tensi-camera.service` | PC1 | Auto-start the camera streaming service on boot |
 
-### PRE-FLIGHT-CHECKLIST.md
-**Use this when the NetGear switch arrives!**
+### Installing a Systemd Service
 
-Complete step-by-step checklist covering:
-- Hardware connection verification
-- Network testing
-- System startup sequence
-- Teleoperation testing
-- Success criteria
-- Troubleshooting
+```bash
+sudo cp <service-file> /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable <service-name>
+sudo systemctl start <service-name>
+```
 
-### QUICK-START.md
-**Daily usage reference**
+## Quick Reference
 
-Quick commands for:
-- Starting the system
-- Stopping the system
-- Troubleshooting common issues
-- Verification checks
+### Start Everything (Distributed)
 
-### SETUP-WITH-TWO-SWITCHES.md
-**Complete setup documentation**
+```bash
+# On PC2 (or from web UI)
+python3 -u ~/leader_service.py --ip 192.168.1.2 --port 5555 --fps 60
 
-Comprehensive guide covering:
-- Physical network topology
-- Prerequisites and dependencies
-- Hardware requirements
-- Step-by-step setup instructions
-- Troubleshooting guide
-- Network flow diagrams
+# On PC1
+cd ~/tensi-trossen-studio/backend
+uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 
-### IMPLEMENTATION-SUMMARY.md
-**Technical implementation details**
+cd ~/tensi-trossen-studio/frontend
+npm run dev
 
-Documents:
-- Architecture decisions
-- Problems solved and solutions
-- Known issues and limitations
-- Testing plan
-- Key learnings
+# Open http://localhost:5173 and click Start Teleoperation
+```
 
-### UDP-ARCHITECTURE.md
-**UDP tunneling technical details**
+### Stop Everything
 
-Explains:
-- Why UDP tunneling was needed
-- How the dual-socat solution works
-- Data flow diagrams
-- Port mapping
-- Testing procedures
+```bash
+# From the web UI: click Stop, then Stop Leader
+# Or manually:
+curl -X POST http://localhost:8000/api/teleoperate/stop
+curl -X POST http://localhost:8000/api/leader-service/stop
+```
 
-## Hardware Requirements
-
-### Current Setup (PC1)
-- Ubuntu PC with WiFi + Ethernet
-- NetGear GS305E switch
-- Follower robot with iNerve controller
-- 2x RealSense cameras
-
-### Required Addition (PC2)
-- ⏳ **NetGear GS305E switch** (ETA: 2 days)
-- Ubuntu PC with WiFi + Ethernet (already have)
-- Leader robot with iNerve controller (already have)
-
-### Network Topology After Switch Arrives
+## Network Topology
 
 ```
-PC1: 192.168.2.140 (WiFi), 192.168.1.100 (Ethernet)
-  └── NetGear 1
+PC1 (192.168.2.140 WiFi, 192.168.1.100 Ethernet)
+  └── NetGear Switch 1
       ├── Follower iNerve (192.168.1.5)
-      └── Cameras (USB to PC1)
+      └── RealSense cameras (USB)
 
-PC2: 192.168.2.138 (WiFi), 192.168.1.x (Ethernet)
-  └── NetGear 2
+PC2 (192.168.2.138 WiFi, 192.168.1.x Ethernet)
+  └── NetGear Switch 2
       └── Leader iNerve (192.168.1.2)
 
-WiFi (192.168.2.x): SSH tunnels between PC1 ↔ PC2
+Communication: PC1 ← TCP:5555 over WiFi → PC2
 ```
 
-## Critical Information
+## Pre-Deployment Testing
 
-### Why the Second Switch is Required
+Before deploying changes to the robots, run the automated test suite:
 
-The Leader robot's iNerve controller **cannot function** with a direct PC-to-iNerve connection. Testing revealed:
-- Direct connection: `ping 192.168.1.2` from PC2 fails
-- Direct connection: TCP/UDP ports unreachable
-- Direct connection: iNerve LED goes red (fault state)
-
-The iNerve controllers require proper network infrastructure provided by switches (ARP, broadcast, specific timing, etc.).
-
-### Configuration Changes
-
-The `config.json` has been updated for distributed operation:
-
-```json
-{
-  "robot": {
-    "leader_ip": "127.0.0.1",     // ← Routes through SSH tunnel
-    "follower_ip": "192.168.1.5", // ← Direct Ethernet
-    ...
-  }
-}
-```
-
-**Do not change `leader_ip` back to `192.168.1.2`** - the tunneling architecture requires localhost.
-
-## Getting Started (When Switch Arrives)
-
-1. **Read:** [PRE-FLIGHT-CHECKLIST.md](./PRE-FLIGHT-CHECKLIST.md)
-2. **Connect:** Leader iNerve → NetGear 2 → PC2
-3. **Verify:** Network connectivity from PC2
-4. **Run:** `./start-all-tunnels.sh`
-5. **Test:** Follow checklist to verify teleoperation
-
-## Troubleshooting
-
-### Common Issues
-
-**Leader LED is red:**
 ```bash
-# Power cycle the iNerve controller
-# Wait for green LED
+# Backend (68 tests — config, CLI args, SSH logic, API integration)
+cd backend && uv run pytest tests/ -v
+
+# Frontend (46 tests — API client, all UI components)
+cd frontend && npm test
 ```
 
-**Can't reach leader from PC2:**
-```bash
-ssh hadi@192.168.2.138 'ping -c 2 192.168.1.2'
-# If fails: Check switch connection
-```
+Then run through the [Hardware Test Checklist](../docs/HARDWARE-TEST-CHECKLIST.md) for any changes affecting robot control, camera management, or the distributed system.
 
-**Tunnels not starting:**
-```bash
-./stop-all-tunnels.sh
-./start-all-tunnels.sh
-```
+## Archived Documentation
 
-**Cameras unavailable:**
-```bash
-pkill -f lerobot
-# Restart backend
-```
-
-### Logs
-
-**PC1 socat log:**
-```bash
-tail -f /tmp/socat-pc1.log
-```
-
-**PC2 socat log:**
-```bash
-ssh hadi@192.168.2.138 'tail -f /tmp/socat.log'
-```
-
-**Backend logs:**
-Check the terminal running `uvicorn`
-
-## Architecture Highlights
-
-### UDP-over-SSH Tunneling
-
-Since SSH cannot tunnel UDP natively, we implemented a dual-socat architecture:
-
-1. **PC1 Wrapper:** Converts UDP:50000 → TCP:15000
-2. **SSH Tunnel:** Forwards TCP:15000 to PC2
-3. **PC2 Relay:** Converts TCP:15000 → UDP:50000 → Robot
-
-This allows bidirectional UDP communication over SSH.
-
-### Camera Management
-
-Implemented singleton `CameraManager` to handle RealSense camera lifecycle:
-- Only one process can access cameras at a time
-- Auto-releases cameras before teleoperation
-- Restarts streaming after teleoperation ends
-- Thread-safe operations
-
-### Distributed Architecture
-
-- **PC1:** Operator station with UI, cameras, follower robot
-- **PC2:** Leader robot station (minimal, just robot control)
-- **Communication:** SSH tunnels over WiFi network
-- **Benefit:** Physical separation of leader/follower robots
-
-## Files in This Directory
-
-### Documentation
-- `README.md` - This file
-- `PRE-FLIGHT-CHECKLIST.md` - Testing checklist
-- `QUICK-START.md` - Quick reference
-- `SETUP-WITH-TWO-SWITCHES.md` - Complete setup guide
-- `IMPLEMENTATION-SUMMARY.md` - Technical summary
-- `UDP-ARCHITECTURE.md` - UDP tunneling details
-- `QUICKSTART-TUNNELS.md` - Tunnel quick reference
-
-### Scripts
-- `start-all-tunnels.sh` - Start everything
-- `stop-all-tunnels.sh` - Stop everything
-- `test-setup.sh` - Verify setup
-- `ssh-tunnel-complete.sh` - SSH tunnel setup
-- `setup-pc1-udp-wrapper.sh` - PC1 socat wrapper
-- `setup-pc2-udp-relay.sh` - PC2 socat relay
-- `ssh-tunnel-leader.sh` - TCP tunnel only (deprecated)
-- `ssh-tunnel-udp.sh` - Early UDP attempt (deprecated)
-
-### Legacy/Unused
-- `deploy-pc1.sh` - Deployment automation (not needed for tunnel setup)
-- `deploy-pc2.sh` - PC2 deployment (not needed, PC2 only runs socat)
-- `tensi-backend.service` - Systemd service (deferred)
-- `tensi-camera.service` - Systemd service (deferred)
-
-### Other Files
-- `CHECKLIST.md` - Original deployment checklist
-- `IMPLEMENTATION.md` - Original implementation plan
-- `QUICKREF.md` - Original quick reference
-- `PC2-SETUP-GUIDE.md` - Original PC2 guide
-
-## Next Steps
-
-1. ⏳ **Wait** for NetGear switch delivery
-2. 🔌 **Connect** hardware per topology diagram
-3. ✅ **Verify** network connectivity
-4. 🚀 **Test** using PRE-FLIGHT-CHECKLIST.md
-5. 🎉 **Celebrate** distributed teleoperation!
-
-## Support
-
-For issues or questions:
-1. Check [QUICK-START.md](./QUICK-START.md) troubleshooting section
-2. Review [SETUP-WITH-TWO-SWITCHES.md](./SETUP-WITH-TWO-SWITCHES.md) detailed guide
-3. Check logs: `/tmp/socat-pc1.log` and `ssh hadi@192.168.2.138 'cat /tmp/socat.log'`
+The `archive/` subdirectory contains earlier documentation from the SSH tunnel / UDP relay approach that was superseded by the Remote Leader architecture. Kept for historical reference only.
 
 ---
 
-**Last Updated:** 2026-02-13  
-**Status:** Ready for testing when switch arrives  
-**Project:** TENSI Trossen Studio - Distributed Teleoperation
+Last updated: 2026-02-16

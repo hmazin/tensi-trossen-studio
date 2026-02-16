@@ -1,0 +1,32 @@
+# Systemd service for the Remote Leader Service
+#
+# Install on PC2:
+#   sudo cp leader-service.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable leader-service
+#   sudo systemctl start leader-service
+#
+# Check status:
+#   sudo systemctl status leader-service
+#   journalctl -u leader-service -f
+
+[Unit]
+Description=Remote Leader Service for Distributed Teleoperation
+After=network.target
+
+[Service]
+Type=simple
+User=hadi
+WorkingDirectory=/home/hadi
+ExecStart=/usr/bin/python3 -u /home/hadi/leader_service.py --ip 192.168.1.2 --port 5555 --fps 60
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment=HOME=/home/hadi
+Environment=PATH=/home/hadi/.local/bin:/usr/local/bin:/usr/bin:/bin
+
+[Install]
+WantedBy=multi-user.target

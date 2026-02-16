@@ -14,5 +14,9 @@ dist/
 # IDE
 .idea/
 .vscode/
+.cursor/
 *.swp
 *.swo
+
+# Test caches
+.pytest_cache/
