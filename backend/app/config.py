@@ -50,6 +50,10 @@ class RobotConfig(BaseModel):
             },
         },
     )
+    operator_camera: dict[str, Any] | None = Field(
+        description="Optional USB operator (HMI) camera; not used for teleop/recording",
+        default=None,
+    )
     remote_leader: bool = Field(
         description="Enable remote leader mode: leader runs on a separate PC with leader_service.py",
         default=False,
@@ -73,6 +77,10 @@ class RobotConfig(BaseModel):
     enable_local_cameras: bool = Field(
         description="Whether this instance manages cameras directly (true) or proxies to remote service (false)",
         default=True,
+    )
+    studio_host_for_remote: str | None = Field(
+        description="This PC's WiFi IP (192.168.2.x) for opening Studio from another PC; used in UI for 'Open from other PCs' link",
+        default=None,
     )
 
 

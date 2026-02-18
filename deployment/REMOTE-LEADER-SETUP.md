@@ -69,7 +69,7 @@ PC2 (Leader Side - e.g., Toronto)         PC1 (Follower Side - e.g., Montreal)
 1. Open http://localhost:5173
 2. Click the **gear icon** (top-right) to open Settings
 3. Enable **Remote Leader Mode**
-4. Set **Leader Service Host** to PC2's WiFi IP (e.g., `192.168.2.138`)
+4. Set **Leader Service Host** to PC2’s **192.168.2.x** (WiFi) IP (e.g. `192.168.2.138`) — not the Ethernet 192.168.1.x
 5. Set **Leader Service Port** to `5555`
 6. Click **Save Settings**
 

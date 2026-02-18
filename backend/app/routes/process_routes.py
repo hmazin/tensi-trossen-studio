@@ -33,9 +33,10 @@ def _reset_realsense_cameras() -> None:
 
 
 def _shutdown_cameras_for_process() -> None:
-    """Shutdown local and/or remote cameras before starting a process that needs them."""
-    # Shutdown local cameras
-    CameraManager.get_instance().shutdown_all()
+    """Shutdown local and/or remote teleop cameras before starting a process. Operator camera stays on."""
+    config = load_config()
+    teleop_keys = set(config.robot.cameras or {})
+    CameraManager.get_instance().shutdown_cameras_for_teleop(teleop_keys)
 
     # Hardware-reset RealSense cameras to avoid stale state
     _reset_realsense_cameras()

@@ -10,7 +10,8 @@ A system for teleoperating, recording, training, and replaying Trossen WidowX AI
 - **Recording** — Capture demonstration episodes with camera feeds
 - **Training** — Train ACT/Diffusion policies on collected data
 - **Replay** — Execute learned behaviors on the physical robot
-- **Camera streaming** — Live RealSense camera feeds in the web UI
+- **Camera streaming** — Live RealSense (wrist, top) and optional **Operator view (USB)** camera in the web UI
+- **Launcher (PC1)** — Desktop GUI to start/stop backend and frontend and edit PC1/PC2 IPs
 - **Distributed teleoperation** — Operate robots across PCs over WiFi or WAN
 - **Leader service management** — Start/stop the remote leader service from the web UI
 - **Web configuration** — All settings configurable through the browser
@@ -44,6 +45,17 @@ PC2 (Leader Side)                      PC1 (Follower Side)
 
 This works over WiFi (LAN) and WAN (internet via VPN) because it only needs a single TCP connection at ~2 KB/s, tolerating 50-200ms latency.
 
+### Two networks (important)
+
+Each machine has **two IP domains**; use the right one for each purpose:
+
+| Domain       | Interface | Use |
+|-------------|-----------|-----|
+| **192.168.1.x** | Ethernet  | Netgate, robot arms (leader/follower). Set **Leader IP** and **Follower IP** in Settings to these. |
+| **192.168.2.x** | WiFi      | Internet and internal network. Use this when opening the Studio from another PC (e.g. `http://192.168.2.140:5173`) and set **Leader Service Host** (PC2) to its 192.168.2.x address for distributed teleop. |
+
+Do not mix them: robot arms and Netgate are on 192.168.1.x; PC-to-PC and web access use 192.168.2.x.
+
 ## Quick Start
 
 ### Prerequisites
@@ -61,7 +73,18 @@ git clone https://github.com/hmazin/tensi-trossen-studio.git
 cd tensi-trossen-studio
 ```
 
-### Start the Backend
+### Launcher (PC1) — optional GUI
+
+On PC1 you can run a small desktop app to start/stop the backend and frontend and to view/edit PC1/PC2 IPs:
+
+```bash
+# From repo root (requires Python 3 and tkinter)
+python launcher.py
+```
+
+The launcher window provides: (1) Backend status and Start/Stop, (2) Frontend status and Start/Stop, (3) PC1 WiFi and Ethernet IPs (with auto-detected defaults), (4) PC2 WiFi and Ethernet IPs (defaults can be changed). IPs are saved to `~/.tensi_trossen_studio/launcher.json`. On Debian/Ubuntu, install tkinter if needed: `sudo apt install python3-tk`.
+
+### Start the Backend (manual)
 
 ```bash
 cd backend
@@ -69,7 +92,7 @@ uv sync
 uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Start the Frontend
+### Start the Frontend (manual)
 
 ```bash
 cd frontend
@@ -86,9 +109,9 @@ http://localhost:5173
 ### First-Time Configuration
 
 1. Click the gear icon (top-right) to open Settings
-2. Set **Follower IP** (default: `192.168.1.5`)
-3. For single-PC: set **Leader IP** (default: `192.168.1.2`)
-4. For distributed: enable **Remote Leader Mode** and set the host/port
+2. Set **Follower IP** (default: `192.168.1.5`) — use the robot’s **192.168.1.x** address
+3. For single-PC: set **Leader IP** (default: `192.168.1.2`) — **192.168.1.x**
+4. For distributed: enable **Remote Leader Mode** and set **Leader Service Host** to PC2’s **192.168.2.x** (WiFi) address and port (e.g. 5555)
 5. Configure camera serial numbers
 6. Click **Save Settings**
 
@@ -110,6 +133,16 @@ See the full guide: [deployment/REMOTE-LEADER-SETUP.md](deployment/REMOTE-LEADER
 4. Enable **Remote Leader Mode** in the web UI Settings
 5. Click **Start Teleoperation**
 
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| **[docs/STUDIO-USER-GUIDE.md](docs/STUDIO-USER-GUIDE.md)** | **Full user & operator guide:** two networks, launcher, cameras (Wrist, Top, Operator view USB), finding operator camera index, opening from PC2, config paths, troubleshooting. |
+| [deployment/REMOTE-LEADER-SETUP.md](deployment/REMOTE-LEADER-SETUP.md) | Distributed teleop (leader on PC2). |
+| [deployment/README.md](deployment/README.md) | Network topology, launcher, scripts. |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | System architecture. |
+| [docs/TROSSEN_LEROBOT_REFERENCE.md](docs/TROSSEN_LEROBOT_REFERENCE.md) | LeRobot CLI reference. |
+
 ## Configuration
 
 Configuration is stored at `~/.tensi_trossen_studio/config.json`:
@@ -126,7 +159,8 @@ Configuration is stored at `~/.tensi_trossen_studio/config.json`:
     "cameras": {
       "wrist": { "type": "intelrealsense", "serial_number_or_name": "218622275782", "width": 640, "height": 480, "fps": 30 },
       "top":   { "type": "intelrealsense", "serial_number_or_name": "218622278263", "width": 640, "height": 480, "fps": 30 }
-    }
+    },
+    "operator_camera": null
   },
   "dataset": {
     "repo_id": "tensi/test_dataset",
@@ -138,7 +172,7 @@ Configuration is stored at `~/.tensi_trossen_studio/config.json`:
 }
 ```
 
-All fields are editable through the web UI Settings panel.
+All fields are editable through the web UI Settings panel. For the optional **Operator view camera** (USB), set `operator_camera` to e.g. `{ "type": "usb", "device_index": 12, "width": 640, "height": 480, "fps": 30 }` or use Settings → Cameras → Operator view camera (USB). See [docs/STUDIO-USER-GUIDE.md](docs/STUDIO-USER-GUIDE.md) for finding the device index.
 
 ## Usage
 

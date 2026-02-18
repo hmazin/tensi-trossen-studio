@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import type { AppConfig } from '../api/client'
-import { saveConfig } from '../api/client'
+import type { AppConfig, UsbVideoDevice } from '../api/client'
+import { saveConfig, getUsbVideoDevices } from '../api/client'
 
 interface ConfigFormProps {
   config: AppConfig | null
@@ -12,6 +12,9 @@ interface ConfigFormProps {
 export function ConfigForm({ config, onConfigChange, open, onClose }: ConfigFormProps) {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
+  const [usbDevices, setUsbDevices] = useState<UsbVideoDevice[] | null>(null)
+  const [usbDevicesLoading, setUsbDevicesLoading] = useState(false)
+  const [usbDevicesError, setUsbDevicesError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) setMessage(null)
@@ -130,6 +133,183 @@ export function ConfigForm({ config, onConfigChange, open, onClose }: ConfigForm
                   className="input-field"
                   placeholder="218622278263"
                 />
+              </Field>
+
+              {/* Operator view camera - USB, not RealSense; not used for teleop/recording */}
+              <div className="rounded-lg border border-gray-700/50 bg-gray-800/30 p-3">
+                <label className="flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={config.robot.operator_camera != null}
+                    onChange={(e) => {
+                      const operator_camera = e.target.checked
+                        ? { type: 'usb', device_index: 0, width: 640, height: 480, fps: 30 }
+                        : null
+                      onConfigChange({ ...config, robot: { ...config.robot, operator_camera } })
+                    }}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <div>
+                    <span className="text-sm font-medium text-white">Operator view camera (USB)</span>
+                    <p className="text-[11px] text-gray-500">USB camera for operator view only; not a RealSense, not used for teleop or recording</p>
+                  </div>
+                </label>
+                {config.robot.operator_camera != null ? (
+                  <div className="mt-3 space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                    <Field label="Device index">
+                      <input
+                        type="number"
+                        min={0}
+                        value={config.robot.operator_camera.device_index ?? 0}
+                        onChange={(e) =>
+                          onConfigChange({
+                            ...config,
+                            robot: {
+                              ...config.robot,
+                              operator_camera: { ...config.robot.operator_camera!, device_index: Number(e.target.value) },
+                            },
+                          })
+                        }
+                        className="input-field"
+                      />
+                    </Field>
+                    <Field label="Width">
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.robot.operator_camera.width ?? 640}
+                        onChange={(e) =>
+                          onConfigChange({
+                            ...config,
+                            robot: {
+                              ...config.robot,
+                              operator_camera: { ...config.robot.operator_camera!, width: Number(e.target.value) },
+                            },
+                          })
+                        }
+                        className="input-field"
+                      />
+                    </Field>
+                    <Field label="Height">
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.robot.operator_camera.height ?? 480}
+                        onChange={(e) =>
+                          onConfigChange({
+                            ...config,
+                            robot: {
+                              ...config.robot,
+                              operator_camera: { ...config.robot.operator_camera!, height: Number(e.target.value) },
+                            },
+                          })
+                        }
+                        className="input-field"
+                      />
+                    </Field>
+                    <Field label="FPS">
+                      <input
+                        type="number"
+                        min={1}
+                        value={config.robot.operator_camera.fps ?? 30}
+                        onChange={(e) =>
+                          onConfigChange({
+                            ...config,
+                            robot: {
+                              ...config.robot,
+                              operator_camera: { ...config.robot.operator_camera!, fps: Number(e.target.value) },
+                            },
+                          })
+                        }
+                        className="input-field"
+                      />
+                    </Field>
+                    </div>
+                    <div className="rounded border border-gray-600 bg-gray-800/50 p-2">
+                      <p className="mb-2 text-xs text-gray-500">Identify USB camera index</p>
+                      <button
+                        type="button"
+                        disabled={usbDevicesLoading}
+                        onClick={() => {
+                          setUsbDevicesError(null)
+                          setUsbDevices(null)
+                          setUsbDevicesLoading(true)
+                          getUsbVideoDevices()
+                            .then((r) => { setUsbDevices(r.devices); setUsbDevicesError(r.error ?? null) })
+                            .catch((e) => { setUsbDevicesError(e instanceof Error ? e.message : String(e)); setUsbDevices([]) })
+                            .finally(() => setUsbDevicesLoading(false))
+                        }}
+                        className="rounded bg-gray-700 px-2 py-1 text-xs text-gray-300 hover:bg-gray-600 disabled:opacity-50"
+                      >
+                        {usbDevicesLoading ? 'Detecting…' : 'Detect USB cameras'}
+                      </button>
+                      {usbDevicesError && <p className="mt-2 text-xs text-amber-400">{usbDevicesError}</p>}
+                      {usbDevices && usbDevices.length === 0 && !usbDevicesError && <p className="mt-2 text-xs text-gray-500">No /dev/video* devices found (Linux).</p>}
+                      {usbDevices && usbDevices.length > 0 && (
+                        <ul className="mt-2 space-y-1 text-xs">
+                          {usbDevices.map((d) => (
+                            <li key={d.index} className="flex items-center justify-between gap-2 rounded bg-gray-900/80 px-2 py-1">
+                              <span className="text-gray-400">Index {d.index}: {d.path}{d.name ? ` — ${d.name}` : ''}</span>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  onConfigChange({
+                                    ...config,
+                                    robot: {
+                                      ...config.robot,
+                                      operator_camera: { ...config.robot.operator_camera!, device_index: d.index },
+                                    },
+                                  })
+                                }
+                                className="shrink-0 rounded bg-blue-600/80 px-2 py-0.5 text-white hover:bg-blue-500"
+                              >
+                                Use
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </Section>
+
+            {/* Network Section — two networks doc + Studio host for other PCs */}
+            <Section title="Network">
+              <div className="rounded-lg border border-gray-700/50 bg-gray-800/30 p-3">
+                <p className="mb-2 text-xs font-medium text-gray-400">Two networks (do not mix)</p>
+                <table className="w-full text-[11px] text-gray-500">
+                  <tbody>
+                    <tr>
+                      <td className="py-0.5 font-mono text-amber-400/90">192.168.1.x</td>
+                      <td className="py-0.5 pl-2">Ethernet — Netgate, robot arms. Use for Leader IP, Follower IP.</td>
+                    </tr>
+                    <tr>
+                      <td className="py-0.5 font-mono text-emerald-400/90">192.168.2.x</td>
+                      <td className="py-0.5 pl-2">WiFi — Internet, internal LAN. Open Studio from another PC; Leader Service Host (PC2) for distributed.</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+              <Field label="Studio host for other PCs (this PC’s 192.168.2.x)">
+                <input
+                  type="text"
+                  value={config.robot.studio_host_for_remote ?? ''}
+                  onChange={(e) =>
+                    onConfigChange({
+                      ...config,
+                      robot: {
+                        ...config.robot,
+                        studio_host_for_remote: e.target.value.trim() || undefined,
+                      },
+                    })
+                  }
+                  className="input-field"
+                  placeholder="e.g. 192.168.2.140"
+                />
+                <p className="mt-1 text-[11px] text-gray-500">Used for “Open from another PC” link in the header. Leave empty to set later.</p>
               </Field>
             </Section>
 

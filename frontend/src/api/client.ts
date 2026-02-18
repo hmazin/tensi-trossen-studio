@@ -44,6 +44,10 @@ export interface AppConfig {
     remote_leader_host?: string;
     remote_leader_port?: number;
     cameras: Record<string, { type: string; serial_number_or_name: string; width: number; height: number; fps: number }>;
+    /** Optional USB operator (HMI) camera; not used for teleop/recording */
+    operator_camera?: { type: string; device_index?: number; width: number; height: number; fps: number } | null;
+    /** This PC's WiFi IP (192.168.2.x) for opening Studio from another PC; set in Settings → Network */
+    studio_host_for_remote?: string | null;
   };
   dataset: {
     repo_id: string;
@@ -177,6 +181,21 @@ export interface CameraStatusResult {
 
 export async function detectCameras(): Promise<CameraDetectResult> {
   return fetchCameraApi('/cameras/detect');
+}
+
+export interface UsbVideoDevice {
+  index: number;
+  path: string;
+  name: string;
+}
+
+export interface UsbVideoDevicesResult {
+  devices: UsbVideoDevice[];
+  error?: string;
+}
+
+export async function getUsbVideoDevices(): Promise<UsbVideoDevicesResult> {
+  return fetchCameraApi('/cameras/usb-devices');
 }
 
 export async function getCameraStatus(): Promise<CameraStatusResult> {

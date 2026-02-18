@@ -61,19 +61,28 @@ curl -X POST http://localhost:8000/api/teleoperate/stop
 curl -X POST http://localhost:8000/api/leader-service/stop
 ```
 
-## Network Topology
+## Network Topology: Two domains per machine
+
+Each PC has two IP ranges; **do not mix them**:
+
+| Domain       | Interface | Use |
+|-------------|-----------|-----|
+| **192.168.1.x** | Ethernet  | Netgate, robot arms (iNerve). Leader IP, Follower IP, and robot hardware live here. |
+| **192.168.2.x** | WiFi      | Internet and internal LAN. Open Studio from another PC using this (e.g. `http://PC1_192.168.2.x:5173`). Leader Service Host (PC2) is its **192.168.2.x** so PC1 can reach it over WiFi. |
 
 ```
-PC1 (192.168.2.140 WiFi, 192.168.1.100 Ethernet)
-  └── NetGear Switch 1
+PC1 (192.168.2.x WiFi, 192.168.1.x Ethernet)
+  └── NetGear Switch 1 (192.168.1.x)
       ├── Follower iNerve (192.168.1.5)
       └── RealSense cameras (USB)
 
-PC2 (192.168.2.138 WiFi, 192.168.1.x Ethernet)
-  └── NetGear Switch 2
+PC2 (192.168.2.x WiFi, 192.168.1.x Ethernet)
+  └── NetGear Switch 2 (192.168.1.x)
       └── Leader iNerve (192.168.1.2)
 
-Communication: PC1 ← TCP:5555 over WiFi → PC2
+Studio in browser:  http://PC1_192.168.2.x:5173   (use WiFi IP)
+Leader Service:     PC2_192.168.2.x:5555        (PC1 connects over WiFi)
+Robots:             192.168.1.2 (leader), 192.168.1.5 (follower) on Ethernet
 ```
 
 ## Pre-Deployment Testing

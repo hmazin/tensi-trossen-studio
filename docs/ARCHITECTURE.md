@@ -381,10 +381,11 @@ Persisted at `~/.tensi_trossen_studio/config.json`. Loaded on every API request 
 ### Cameras
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/cameras/stream/{key}` | MJPEG stream for a camera |
+| GET | `/api/cameras/stream/{key}` | MJPEG stream for a camera (`wrist`, `top`, `operator`) |
 | GET | `/api/cameras/detect` | Detect connected RealSense cameras |
-| GET | `/api/cameras/status` | Get status of all configured cameras |
-| POST | `/api/cameras/shutdown` | Release all cameras |
+| GET | `/api/cameras/usb-devices` | List USB video devices (index, path, name) for operator view camera |
+| GET | `/api/cameras/status` | Get status of all configured cameras (including operator if set) |
+| POST | `/api/cameras/shutdown` | Release only teleop cameras; operator camera stays on |
 
 ### Leader Service (Remote)
 | Method | Endpoint | Description |
@@ -398,6 +399,18 @@ Persisted at `~/.tensi_trossen_studio/config.json`. Loaded on every API request 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Backend health check |
+
+---
+
+## Operator view camera (USB)
+
+A separate USB camera (e.g. webcam) can be configured as **operator view**: it is streamed in the UI but **not** used for teleoperation or recording and is **not** shut down when starting teleop/record. Config key: `robot.operator_camera` (optional). Backend uses `ManagedUSBCamera` (OpenCV) and stream key `operator`. The frontend shows an "Operator view" tile when `operator_camera` is set. Device index can be discovered via **Detect USB cameras** in Settings or via `GET /api/cameras/usb-devices`. See [docs/STUDIO-USER-GUIDE.md](STUDIO-USER-GUIDE.md).
+
+---
+
+## Launcher (PC1)
+
+`launcher.py` at repo root is a tkinter GUI that starts/stops the backend and frontend, and lets the user view/edit PC1 and PC2 IPs (WiFi and Ethernet). Config: `~/.tensi_trossen_studio/launcher.json`. If port 8000 is in use, the launcher can free it and start the backend. See [docs/STUDIO-USER-GUIDE.md](STUDIO-USER-GUIDE.md).
 
 ---
 

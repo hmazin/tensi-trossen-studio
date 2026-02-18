@@ -9,6 +9,7 @@ import type { AppConfig, ProcessStatus } from './api/client'
 
 function App() {
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [configError, setConfigError] = useState<string | null>(null)
   const [status, setStatus] = useState<ProcessStatus>({
     mode: 'idle',
     running: false,
@@ -19,7 +20,10 @@ function App() {
   const [settingsOpen, setSettingsOpen] = useState(false)
 
   useEffect(() => {
-    getConfig().then(setConfig).catch(() => {})
+    setConfigError(null)
+    getConfig()
+      .then(setConfig)
+      .catch((e) => setConfigError(e instanceof Error ? e.message : 'Failed to load config'))
   }, [])
 
   const refreshStatus = useCallback(async () => {
@@ -42,6 +46,12 @@ function App() {
 
   return (
     <div className="flex h-screen flex-col bg-gray-950">
+      {configError && (
+        <div className="bg-amber-900/50 border-b border-amber-600/50 px-4 py-2 text-sm text-amber-200 flex items-center justify-between gap-4">
+          <span>Cannot reach backend: {configError}. Check that you are using PC1’s IP (e.g. http://192.168.2.140:5173) and that the backend is running on PC1.</span>
+          <button type="button" onClick={() => { setConfigError(null); getConfig().then(setConfig).catch((e) => setConfigError(e instanceof Error ? e.message : 'Failed')) }} className="rounded bg-amber-700 px-2 py-1 text-xs hover:bg-amber-600">Retry</button>
+        </div>
+      )}
       <StatusBar
         config={config}
         status={status}

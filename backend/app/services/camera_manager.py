@@ -238,15 +238,138 @@ class ManagedCamera:
         logger.info(f"Camera {self.key} stopped")
 
 
+class ManagedUSBCamera:
+    """Wrapper for a USB camera (OpenCV) with background capture thread.
+    Same interface as ManagedCamera: start(), stop(), get_latest_frame(), get_error(), is_running.
+    """
+
+    def __init__(
+        self,
+        key: str,
+        device_index: int,
+        width: int,
+        height: int,
+        fps: int,
+    ):
+        self.key = key
+        self.device_index = device_index
+        self.width = width
+        self.height = height
+        self.fps = fps
+        # For status compatibility with ManagedCamera
+        self.serial = f"USB:{device_index}"
+
+        self.cap: cv2.VideoCapture | None = None
+        self.thread: Thread | None = None
+        self.stop_event = Event()
+        self.frame_lock = Lock()
+        self.latest_frame: bytes | None = None
+        self.error: str | None = None
+        self.error_lock = Lock()
+        self.is_running = False
+
+    def start(self) -> None:
+        """Start the USB camera and background capture thread."""
+        if self.is_running:
+            logger.warning(f"Camera {self.key} already running")
+            return
+        try:
+            self.cap = cv2.VideoCapture(self.device_index)
+            if not self.cap.isOpened():
+                raise RuntimeError(f"Could not open USB device index {self.device_index}")
+            self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
+            self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
+            self.cap.set(cv2.CAP_PROP_FPS, self.fps)
+            self.stop_event.clear()
+            self.thread = Thread(target=self._capture_loop, daemon=True, name=f"Camera-{self.key}")
+            self.thread.start()
+            self.is_running = True
+            logger.info(f"USB camera {self.key} (device {self.device_index}) started successfully")
+        except Exception as e:
+            error_msg = str(e)
+            with self.error_lock:
+                self.error = error_msg
+            logger.error(f"Failed to start USB camera {self.key}: {error_msg}")
+            if self.cap:
+                try:
+                    self.cap.release()
+                except Exception:
+                    pass
+                self.cap = None
+
+    def _capture_loop(self) -> None:
+        """Background thread that continuously captures frames."""
+        logger.info(f"Capture loop started for USB camera {self.key}")
+        consecutive_failures = 0
+        max_consecutive_failures = 10
+        while not self.stop_event.is_set():
+            try:
+                if self.cap is None or not self.cap.isOpened():
+                    break
+                ret, frame = self.cap.read()
+                if not ret or frame is None:
+                    consecutive_failures += 1
+                    if consecutive_failures >= max_consecutive_failures:
+                        with self.error_lock:
+                            self.error = f"No frame after {max_consecutive_failures} attempts"
+                        logger.error(f"USB camera {self.key}: {self.error}")
+                        break
+                    time.sleep(0.1)
+                    continue
+                consecutive_failures = 0
+                _, jpeg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                jpeg_bytes = jpeg.tobytes()
+                with self.frame_lock:
+                    self.latest_frame = jpeg_bytes
+                with self.error_lock:
+                    if self.error:
+                        self.error = None
+                        logger.info(f"USB camera {self.key} recovered from error")
+            except Exception as e:
+                consecutive_failures += 1
+                if consecutive_failures >= max_consecutive_failures:
+                    with self.error_lock:
+                        self.error = f"Frame capture failed: {str(e)}"
+                    logger.error(f"USB camera {self.key}: {self.error}")
+                    break
+                time.sleep(0.1)
+        logger.info(f"Capture loop stopped for USB camera {self.key}")
+        self.is_running = False
+
+    def get_latest_frame(self) -> bytes | None:
+        with self.frame_lock:
+            return self.latest_frame
+
+    def get_error(self) -> str | None:
+        with self.error_lock:
+            return self.error
+
+    def stop(self) -> None:
+        if not self.is_running:
+            return
+        logger.info(f"Stopping USB camera {self.key}")
+        self.stop_event.set()
+        if self.thread and self.thread.is_alive():
+            self.thread.join(timeout=2.0)
+        if self.cap:
+            try:
+                self.cap.release()
+            except Exception as e:
+                logger.warning(f"Error releasing USB camera {self.key}: {e}")
+            self.cap = None
+        self.is_running = False
+        logger.info(f"USB camera {self.key} stopped")
+
+
 class CameraManager:
-    """Singleton manager for RealSense cameras with background capture threads."""
+    """Singleton manager for RealSense and USB cameras with background capture threads."""
 
     _instance: "CameraManager | None" = None
     _lock = Lock()
 
     def __init__(self):
         """Initialize the camera manager (use get_instance() instead)."""
-        self.cameras: dict[str, ManagedCamera] = {}
+        self.cameras: dict[str, ManagedCamera | ManagedUSBCamera] = {}
         self.manager_lock = Lock()
         logger.info("CameraManager initialized")
 
@@ -308,6 +431,32 @@ class CameraManager:
 
             # Create and start new camera
             camera = ManagedCamera(key, serial, width, height, fps)
+            self.cameras[key] = camera
+            camera.start()
+
+    def initialize_usb_camera(
+        self,
+        key: str,
+        device_index: int,
+        width: int,
+        height: int,
+        fps: int,
+    ) -> None:
+        """Initialize and start a USB camera (e.g. operator/HMI camera).
+        
+        Args:
+            key: Camera identifier (e.g., "operator")
+            device_index: OpenCV device index (e.g. 0 for /dev/video0)
+            width: Frame width in pixels
+            height: Frame height in pixels
+            fps: Frames per second
+        """
+        with self.manager_lock:
+            if key in self.cameras:
+                logger.info(f"USB camera {key} already exists, stopping old instance")
+                self.cameras[key].stop()
+                del self.cameras[key]
+            camera = ManagedUSBCamera(key, device_index, width, height, fps)
             self.cameras[key] = camera
             camera.start()
 
@@ -388,3 +537,13 @@ class CameraManager:
                 camera.stop()
             self.cameras.clear()
             logger.info("All cameras shut down")
+
+    def shutdown_cameras_for_teleop(self, keys: set[str]) -> None:
+        """Stop and remove only the given camera keys (e.g. teleop cameras).
+        Cameras not in keys (e.g. operator) are left running."""
+        with self.manager_lock:
+            for key in list(self.cameras.keys()):
+                if key in keys:
+                    self.cameras[key].stop()
+                    del self.cameras[key]
+                    logger.info(f"Camera {key} shut down for teleop")
