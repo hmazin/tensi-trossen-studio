@@ -15,7 +15,8 @@ const baseConfig = {
     remote_leader_port: 5555,
     use_top_camera_only: true,
     cameras: {
-      wrist: { type: 'intelrealsense', serial_number_or_name: 'WRIST', width: 640, height: 480, fps: 30 },
+      left_wrist: { type: 'intelrealsense', serial_number_or_name: '218622276325', width: 640, height: 480, fps: 30 },
+      right_wrist: { type: 'intelrealsense', serial_number_or_name: 'WRIST', width: 640, height: 480, fps: 30 },
       top: { type: 'intelrealsense', serial_number_or_name: 'TOP', width: 640, height: 480, fps: 30 },
     },
   },

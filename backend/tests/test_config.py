@@ -28,7 +28,8 @@ class TestPydanticDefaults:
         assert cfg.remote_leader is False
         assert cfg.remote_leader_host == "192.168.2.138"
         assert cfg.remote_leader_port == 5555
-        assert "wrist" in cfg.cameras
+        assert "left_wrist" in cfg.cameras
+        assert "right_wrist" in cfg.cameras
         assert "top" in cfg.cameras
 
     def test_dataset_config_defaults(self):
@@ -123,7 +124,19 @@ class TestLoadConfig:
         tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
         tmp_config_path.write_text(json.dumps(data))
         cfg = load_config()
-        assert "wrist" in cfg.robot.cameras
+        assert "left_wrist" in cfg.robot.cameras
+        assert "right_wrist" in cfg.robot.cameras
+        assert "top" in cfg.robot.cameras
+
+    def test_load_migrates_wrist_to_right_wrist(self, tmp_config_path):
+        data = {"robot": {"cameras": {"wrist": {"type": "intelrealsense", "serial_number_or_name": "OLD_WRIST", "width": 640, "height": 480, "fps": 30}}}}
+        tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_config_path.write_text(json.dumps(data))
+        cfg = load_config()
+        assert "right_wrist" in cfg.robot.cameras
+        assert cfg.robot.cameras["right_wrist"]["serial_number_or_name"] == "OLD_WRIST"
+        assert "wrist" not in cfg.robot.cameras
+        assert "left_wrist" in cfg.robot.cameras
         assert "top" in cfg.robot.cameras
 
     def test_load_corrupt_json_falls_back(self, tmp_config_path):
@@ -131,6 +144,30 @@ class TestLoadConfig:
         tmp_config_path.write_text("{invalid json!!!")
         cfg = load_config()
         assert cfg.robot.leader_ip == "192.168.1.2"
+
+    def test_load_uses_launcher_network_values(self, tmp_config_path, tmp_launcher_path):
+        tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_config_path.write_text(json.dumps({
+            "robot": {
+                "leader_ip": "10.0.0.1",
+                "follower_ip": "10.0.0.2",
+                "remote_leader_host": "10.0.0.99",
+                "remote_leader_ssh_user": "old-user",
+            }
+        }))
+        tmp_launcher_path.write_text(json.dumps({
+            "leader_ip": "192.168.1.2",
+            "follower_ip": "192.168.1.5",
+            "pc2_wifi_ip": "192.168.2.59",
+            "pc2_ssh_user": "hadi",
+        }))
+
+        cfg = load_config()
+
+        assert cfg.robot.leader_ip == "192.168.1.2"
+        assert cfg.robot.follower_ip == "192.168.1.5"
+        assert cfg.robot.remote_leader_host == "192.168.2.59"
+        assert cfg.robot.remote_leader_ssh_user == "hadi"
 
 
 class TestSaveConfig:

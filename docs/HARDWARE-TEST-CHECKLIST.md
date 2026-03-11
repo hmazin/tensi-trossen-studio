@@ -158,7 +158,9 @@ Common issues to watch for during testing:
 | "Failed to receive initial joint outputs" | Robot controller not ready; power cycle and wait for green LED |
 | "ConnectionRefusedError" on remote leader | Leader service not running on PC2 |
 | "No route to host" on 192.168.1.x | Trying to reach robot on wrong PC's Ethernet network |
-| Camera "hardware timeout" | USB bandwidth issue; try different USB port |
+| Camera "hardware timeout" | USB bandwidth issue; try different USB port or Settings -> Use top camera only |
+| Teleop exits with "Timed out waiting for frame" / TimeoutError | RealSense stopped delivering frames (often after leader disconnect). Use top camera only, or plug each camera into a different USB root. |
+| "Joint limit exceeded" / "velocity limit exceeded" | Follower arm tried to move too fast (e.g. Joint 3 velocity). Move leader and follower to a similar rest pose, then start teleoperation again. |
 | Process Log shows nothing | Backend may have crashed; check terminal output |
 
 ---

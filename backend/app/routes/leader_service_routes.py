@@ -80,7 +80,11 @@ def start_leader_service() -> dict:
     if exit_code != 0:
         return {
             "status": "error",
-            "message": f"Cannot reach leader robot at {leader_ip} from PC2. Is it powered on?",
+            "message": (
+                f"Cannot reach leader robot at {leader_ip} from PC2. "
+                "Check: (1) Leader is powered on and on the same Ethernet as PC2 (192.168.1.x). "
+                f"(2) On PC2 run: ping -c 2 {leader_ip}"
+            ),
         }
 
     start_cmd = (

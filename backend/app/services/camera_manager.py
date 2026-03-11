@@ -494,7 +494,7 @@ class CameraManager:
                 return {
                     "status": "error",
                     "error_type": "hardware_timeout",
-                    "message": "Camera opened but failed to capture frames. Check USB bandwidth/power.",
+                    "message": "Camera opened but failed to capture frames. Check USB bandwidth/power. In Settings, try 'Use top camera only' or use different USB ports.",
                     "details": {
                         "serial": camera.serial,
                         "error": error,

@@ -79,13 +79,35 @@ export function ConfigForm({ config, onConfigChange, open, onClose }: ConfigForm
                 </label>
 
                 {config.robot.remote_leader ? (
-                  <div className="mt-3 grid grid-cols-2 gap-3">
-                    <Field label="Leader Service Host">
-                      <input type="text" value={config.robot.remote_leader_host ?? '192.168.2.138'} onChange={(e) => onConfigChange({ ...config, robot: { ...config.robot, remote_leader_host: e.target.value } })} className="input-field" />
+                  <div className="mt-3 space-y-3">
+                    <Field label="Leader robot IP (Ethernet, from PC2)">
+                      <input
+                        type="text"
+                        value={config.robot.leader_ip}
+                        onChange={(e) => onConfigChange({ ...config, robot: { ...config.robot, leader_ip: e.target.value } })}
+                        className="input-field"
+                        placeholder="192.168.1.2"
+                      />
                     </Field>
-                    <Field label="Port">
-                      <input type="number" value={config.robot.remote_leader_port ?? 5555} onChange={(e) => onConfigChange({ ...config, robot: { ...config.robot, remote_leader_port: Number(e.target.value) } })} className="input-field" />
-                    </Field>
+                    <div className="grid grid-cols-2 gap-3">
+                      <Field label="Leader Service Host (PC2 WiFi)">
+                        <input
+                          type="text"
+                          value={config.robot.remote_leader_host ?? config.launcher?.pc2_wifi_ip ?? '192.168.2.138'}
+                          onChange={(e) => onConfigChange({ ...config, robot: { ...config.robot, remote_leader_host: e.target.value } })}
+                          className="input-field"
+                          placeholder="192.168.2.138"
+                        />
+                      </Field>
+                      <Field label="Port">
+                        <input
+                          type="number"
+                          value={config.robot.remote_leader_port ?? 5555}
+                          onChange={(e) => onConfigChange({ ...config, robot: { ...config.robot, remote_leader_port: Number(e.target.value) } })}
+                          className="input-field"
+                        />
+                      </Field>
+                    </div>
                   </div>
                 ) : (
                   <div className="mt-3">
@@ -108,18 +130,57 @@ export function ConfigForm({ config, onConfigChange, open, onClose }: ConfigForm
                 />
                 <span className="text-sm text-gray-300">Use top camera only</span>
               </label>
-              <Field label="Wrist camera serial">
+              <Field label="Left wrist camera serial (Trossen)">
                 <input
                   type="text"
-                  value={config.robot.cameras?.wrist?.serial_number_or_name ?? ''}
+                  value={config.robot.cameras?.left_wrist?.serial_number_or_name ?? ''}
                   onChange={(e) => {
                     const cameras = { ...config.robot.cameras }
-                    cameras.wrist = { ...(cameras.wrist ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), serial_number_or_name: e.target.value }
+                    cameras.left_wrist = { ...(cameras.left_wrist ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), serial_number_or_name: e.target.value }
+                    onConfigChange({ ...config, robot: { ...config.robot, cameras } })
+                  }}
+                  className="input-field"
+                  placeholder="218622276325"
+                />
+                <label className="mt-1.5 flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={config.robot.cameras?.left_wrist?.use_in_teleop !== false}
+                    onChange={(e) => {
+                      const cameras = { ...config.robot.cameras }
+                      cameras.left_wrist = { ...(cameras.left_wrist ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), use_in_teleop: e.target.checked }
+                      onConfigChange({ ...config, robot: { ...config.robot, cameras } })
+                    }}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">Use in teleoperation (send to Trossen)</span>
+                </label>
+              </Field>
+              <Field label="Right wrist camera serial">
+                <input
+                  type="text"
+                  value={config.robot.cameras?.right_wrist?.serial_number_or_name ?? ''}
+                  onChange={(e) => {
+                    const cameras = { ...config.robot.cameras }
+                    cameras.right_wrist = { ...(cameras.right_wrist ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), serial_number_or_name: e.target.value }
                     onConfigChange({ ...config, robot: { ...config.robot, cameras } })
                   }}
                   className="input-field"
                   placeholder="218622275782"
                 />
+                <label className="mt-1.5 flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={config.robot.cameras?.right_wrist?.use_in_teleop !== false}
+                    onChange={(e) => {
+                      const cameras = { ...config.robot.cameras }
+                      cameras.right_wrist = { ...(cameras.right_wrist ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), use_in_teleop: e.target.checked }
+                      onConfigChange({ ...config, robot: { ...config.robot, cameras } })
+                    }}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">Use in teleoperation (send to Trossen)</span>
+                </label>
               </Field>
               <Field label="Top camera serial">
                 <input
@@ -133,6 +194,19 @@ export function ConfigForm({ config, onConfigChange, open, onClose }: ConfigForm
                   className="input-field"
                   placeholder="218622278263"
                 />
+                <label className="mt-1.5 flex items-center gap-2.5">
+                  <input
+                    type="checkbox"
+                    checked={config.robot.cameras?.top?.use_in_teleop !== false}
+                    onChange={(e) => {
+                      const cameras = { ...config.robot.cameras }
+                      cameras.top = { ...(cameras.top ?? { type: 'intelrealsense', width: 640, height: 480, fps: 30 }), use_in_teleop: e.target.checked }
+                      onConfigChange({ ...config, robot: { ...config.robot, cameras } })
+                    }}
+                    className="h-4 w-4 rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-400">Use in teleoperation (send to Trossen)</span>
+                </label>
               </Field>
 
               {/* Operator view camera - USB, not RealSense; not used for teleop/recording */}

@@ -15,8 +15,10 @@ export function CameraViewer({ config, status }: CameraViewerProps) {
 
   const cameras = config?.robot?.cameras ?? {}
   const hasOperatorCamera = Boolean(config?.robot?.operator_camera)
-  // Always show at least wrist and top when we have config, so camera section is visible even if cameras object was empty
-  const baseKeys = Object.keys(cameras).length > 0 ? Object.keys(cameras) : (config?.robot ? ['wrist', 'top'] : [])
+  // Display order left to right: Right wrist, Top, Left wrist
+  const CAMERA_DISPLAY_ORDER = ['right_wrist', 'top', 'left_wrist']
+  const rawKeys = Object.keys(cameras).length > 0 ? Object.keys(cameras) : (config?.robot ? ['left_wrist', 'right_wrist', 'top'] : [])
+  const baseKeys = CAMERA_DISPLAY_ORDER.filter((k) => rawKeys.includes(k)).concat(rawKeys.filter((k) => !CAMERA_DISPLAY_ORDER.includes(k)))
   const cameraKeys = [...baseKeys, ...(hasOperatorCamera ? ['operator'] : [])]
 
   useEffect(() => {
@@ -49,7 +51,7 @@ export function CameraViewer({ config, status }: CameraViewerProps) {
       <div className="rounded-xl border border-gray-700/50 bg-gray-800/30 p-4">
         <h2 className="mb-4 text-sm font-semibold text-gray-300">Camera Feed</h2>
         <p className="text-sm text-gray-500">
-          No camera config loaded. Open Settings to set wrist and top camera serials (and optionally enable Operator camera), then save. If you already did, reload the page or check that the backend is running.
+          No camera config loaded. Open Settings to set left wrist, right wrist, and top camera serials (and optionally enable Operator camera), then save. If you already did, reload the page or check that the backend is running.
         </p>
       </div>
     )
@@ -125,8 +127,8 @@ export function CameraViewer({ config, status }: CameraViewerProps) {
           const isOperator = key === 'operator'
           return (
             <div key={key} className="flex flex-col gap-2">
-              <span className="text-sm font-medium capitalize text-gray-400">
-                {isOperator ? 'Operator view' : key}
+              <span className="text-sm font-medium text-gray-400">
+                {isOperator ? 'Operator view' : (key === 'left_wrist' ? 'Left wrist' : key === 'right_wrist' ? 'Right wrist' : key === 'top' ? 'Top' : key)}
                 {isOperator && (
                   <span className="ml-2 rounded bg-gray-600/70 px-1.5 py-0.5 text-xs text-gray-400">HMI only</span>
                 )}

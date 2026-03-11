@@ -4,7 +4,7 @@ import logging
 import os
 from pathlib import Path
 
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 
 from app.config import load_config
 from app.services.camera_manager import CameraManager
@@ -32,15 +32,17 @@ def _reset_realsense_cameras() -> None:
         logger.warning(f"Camera reset failed (non-fatal): {e}")
 
 
-def _shutdown_cameras_for_process() -> None:
-    """Shutdown local and/or remote teleop cameras before starting a process. Operator camera stays on."""
-    config = load_config()
-    teleop_keys = set(config.robot.cameras or {})
+def _shutdown_cameras_for_process(teleop_keys: set[str] | None = None) -> None:
+    """Shutdown only the given teleop camera keys (or all configured if None). Operator camera stays on."""
+    if teleop_keys is None:
+        config = load_config()
+        teleop_keys = set(config.robot.cameras or {})
     CameraManager.get_instance().shutdown_cameras_for_teleop(teleop_keys)
 
-    # Hardware-reset RealSense cameras to avoid stale state
-    _reset_realsense_cameras()
-    
+    # Hardware-reset RealSense only when we are handing cameras to the process (avoid disrupting Studio viewer)
+    if teleop_keys:
+        _reset_realsense_cameras()
+
     # If remote camera service is configured, shutdown remote cameras
     camera_service_url = os.getenv("CAMERA_SERVICE_URL")
     if camera_service_url:
@@ -58,14 +60,21 @@ def _shutdown_cameras_for_process() -> None:
 
 
 def _robot_config(use_top_camera_only: bool | None = None) -> dict:
-    """Get robot config as dict for process manager."""
+    """Get robot config as dict for process manager. Only cameras with use_in_teleop != False are sent to Trossen."""
     cfg = load_config()
     use_top_only = use_top_camera_only if use_top_camera_only is not None else getattr(cfg.robot, "use_top_camera_only", True)
-    cameras = cfg.robot.cameras
+    cameras = cfg.robot.cameras or {}
+    # Only include cameras that are selected for teleoperation (default True)
+    cameras = {k: v for k, v in cameras.items() if v.get("use_in_teleop", True)}
     if use_top_only and "top" in cameras:
         # Pass top camera as "wrist" key - widowxai_follower may expect wrist slot
         cameras = {"wrist": cameras["top"]}
-    result = {"leader_ip": cfg.robot.leader_ip, "follower_ip": cfg.robot.follower_ip, "cameras": cameras}
+    # Strip use_in_teleop so lerobot does not see it
+    cameras_clean = {
+        k: {kk: vv for kk, vv in v.items() if kk != "use_in_teleop"}
+        for k, v in cameras.items()
+    }
+    result = {"leader_ip": cfg.robot.leader_ip, "follower_ip": cfg.robot.follower_ip, "cameras": cameras_clean}
     if cfg.robot.remote_leader:
         result["remote_leader"] = True
         result["remote_leader_host"] = cfg.robot.remote_leader_host
@@ -97,13 +106,19 @@ def _replay_config(repo_id: str | None = None, episode: int | None = None) -> di
 @router.post("/teleoperate/start")
 def start_teleoperate(display_data: bool = True, use_top_camera_only: bool | None = None) -> dict:
     """Start lerobot-teleoperate."""
-    # Shutdown local and remote cameras so teleoperation can access them
-    _shutdown_cameras_for_process()
-    
+    robot_cfg = _robot_config(use_top_camera_only=use_top_camera_only)
+    if not robot_cfg["cameras"]:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one camera must be used in teleoperation. Enable 'Use in teleoperation' for left wrist, right wrist, or top camera in Settings.",
+        )
+    # Only release cameras that we send to Trossen; others stay available in Studio
+    _shutdown_cameras_for_process(teleop_keys=set(robot_cfg["cameras"].keys()))
+
     pm = ProcessManager()
     config = load_config()
     pm.set_lerobot_path(Path(config.lerobot_trossen_path))
-    pm.start_teleoperate(_robot_config(use_top_camera_only=use_top_camera_only), display_data=display_data)
+    pm.start_teleoperate(robot_cfg, display_data=display_data)
     return {"status": "started", "mode": "teleoperate"}
 
 
@@ -124,9 +139,14 @@ def start_record(
     use_top_camera_only: bool | None = None,
 ) -> dict:
     """Start lerobot-record."""
-    # Shutdown local and remote cameras so recording can access them
-    _shutdown_cameras_for_process()
-    
+    robot_cfg = _robot_config(use_top_camera_only=use_top_camera_only)
+    if not robot_cfg["cameras"]:
+        raise HTTPException(
+            status_code=400,
+            detail="At least one camera must be used in recording. Enable 'Use in teleoperation' for left wrist, right wrist, or top camera in Settings.",
+        )
+    _shutdown_cameras_for_process(teleop_keys=set(robot_cfg["cameras"].keys()))
+
     pm = ProcessManager()
     config = load_config()
     pm.set_lerobot_path(Path(config.lerobot_trossen_path))
@@ -141,7 +161,7 @@ def start_record(
         dataset["single_task"] = single_task
     if push_to_hub is not None:
         dataset["push_to_hub"] = push_to_hub
-    pm.start_record(_robot_config(use_top_camera_only=use_top_camera_only), dataset)
+    pm.start_record(robot_cfg, dataset)
     return {"status": "started", "mode": "record"}
 
 

@@ -102,14 +102,14 @@ class ProcessManager:
         if is_remote:
             teleop_args = [
                 "--teleop.type=remote_leader_teleop",
-                f"--teleop.host={robot_config.get('remote_leader_host', '192.168.2.138')}",
-                f"--teleop.port={robot_config.get('remote_leader_port', 5555)}",
+                f"--teleop.host={robot_config['remote_leader_host']}",
+                f"--teleop.port={robot_config['remote_leader_port']}",
                 "--teleop.id=leader",
             ]
         else:
             teleop_args = [
                 "--teleop.type=widowxai_leader_teleop",
-                f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
+                f"--teleop.ip_address={robot_config['leader_ip']}",
                 "--teleop.id=leader",
             ]
         cmd = [
@@ -138,14 +138,14 @@ class ProcessManager:
         if is_remote:
             teleop_args = [
                 "--teleop.type=remote_leader_teleop",
-                f"--teleop.host={robot_config.get('remote_leader_host', '192.168.2.138')}",
-                f"--teleop.port={robot_config.get('remote_leader_port', 5555)}",
+                f"--teleop.host={robot_config['remote_leader_host']}",
+                f"--teleop.port={robot_config['remote_leader_port']}",
                 "--teleop.id=leader",
             ]
         else:
             teleop_args = [
                 "--teleop.type=widowxai_leader_teleop",
-                f"--teleop.ip_address={robot_config.get('leader_ip', '192.168.1.2')}",
+                f"--teleop.ip_address={robot_config['leader_ip']}",
                 "--teleop.id=leader",
             ]
         cmd = [
@@ -252,7 +252,7 @@ class ProcessManager:
         if self._process and self._process.poll() is None:
             import signal
 
-            self._log_buffer.append("[Studio] Stopping — returning robots to rest position...")
+            self._log_buffer.append("[Studio] Stopping - returning robots to rest position...")
             self._process.send_signal(signal.SIGINT)
             try:
                 self._process.wait(timeout=15)
@@ -265,10 +265,32 @@ class ProcessManager:
             self._status.running = False
             self._status.pid = None
 
+    def _infer_error_from_log(self) -> str | None:
+        """If the process log indicates a known failure, return a short user-facing message."""
+        recent = "\n".join(self._log_buffer[-80:])
+        if "Timed out waiting for frame" in recent or "TimeoutError" in recent and "camera" in recent.lower():
+            return (
+                "Teleoperation stopped: camera timed out. "
+                "Try Settings -> Use top camera only to reduce USB load, or use different USB ports for each camera."
+            )
+        if "TimeoutError" in recent:
+            return "Process stopped due to a timeout. Check the log for details."
+        if "Joint limit exceeded" in recent or "velocity limit exceeded" in recent.lower():
+            return (
+                "Teleoperation stopped: joint/velocity limit exceeded on the follower arm. "
+                "Move leader and follower to a similar rest pose before starting, then Start Teleoperation again."
+            )
+        return None
+
     def get_status(self) -> ProcessStatus:
         """Get current process status and latest logs."""
         if self._process and self._process.poll() is not None:
+            if self._status.error is None:
+                inferred = self._infer_error_from_log()
+                if inferred:
+                    self._status.error = inferred
             self._status.running = False
             self._status.pid = None
+            self._process = None
         self._status.logs = self._log_buffer[-500:]  # Keep last 500 lines
         return self._status

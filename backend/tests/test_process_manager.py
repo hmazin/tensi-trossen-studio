@@ -85,7 +85,7 @@ class TestTeleoperateArgs:
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
         cams = {"top": {"type": "intelrealsense", "serial_number_or_name": "ABC"}}
-        pm.start_teleoperate({"follower_ip": "10.0.0.2", "cameras": cams})
+        pm.start_teleoperate({"leader_ip": "10.0.0.1", "follower_ip": "10.0.0.2", "cameras": cams})
 
         cmd = mock_popen.call_args[0][0]
         cameras_arg = [a for a in cmd if a.startswith("--robot.cameras=")][0]
@@ -99,7 +99,7 @@ class TestRecordArgs:
     def test_record_includes_dataset_params(self, mock_popen):
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
-        robot_cfg = {"follower_ip": "10.0.0.2", "cameras": {}}
+        robot_cfg = {"leader_ip": "10.0.0.1", "follower_ip": "10.0.0.2", "cameras": {}}
         dataset_cfg = {
             "repo_id": "user/data",
             "num_episodes": 5,
@@ -175,30 +175,30 @@ class TestReplayArgs:
 
 
 class TestStopLogic:
-    """stop() sends SIGTERM and escalates to SIGKILL."""
+    """stop() sends SIGINT and escalates to SIGKILL."""
 
-    def test_stop_calls_terminate(self, mock_popen):
+    def test_stop_calls_send_signal(self, mock_popen):
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
-        pm.start_teleoperate({"follower_ip": "x", "cameras": {}})
+        pm.start_teleoperate({"leader_ip": "10.0.0.1", "follower_ip": "x", "cameras": {}})
 
         proc = mock_popen._mock_proc
         proc.poll.return_value = None
 
         pm.stop()
-        proc.terminate.assert_called_once()
+        proc.send_signal.assert_called_once()
 
     def test_stop_escalates_to_kill_on_timeout(self, mock_popen):
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
-        pm.start_teleoperate({"follower_ip": "x", "cameras": {}})
+        pm.start_teleoperate({"leader_ip": "10.0.0.1", "follower_ip": "x", "cameras": {}})
 
         proc = mock_popen._mock_proc
         proc.poll.return_value = None
         proc.wait.side_effect = subprocess.TimeoutExpired(cmd="test", timeout=5)
 
         pm.stop()
-        proc.terminate.assert_called_once()
+        proc.send_signal.assert_called_once()
         proc.kill.assert_called_once()
 
     def test_stop_on_idle_is_noop(self):
@@ -219,7 +219,7 @@ class TestGetStatus:
     def test_status_with_logs(self, mock_popen):
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
-        pm.start_teleoperate({"follower_ip": "x", "cameras": {}})
+        pm.start_teleoperate({"leader_ip": "10.0.0.1", "follower_ip": "x", "cameras": {}})
         pm._log_buffer = [f"line_{i}" for i in range(600)]
 
         s = pm.get_status()
@@ -229,10 +229,10 @@ class TestGetStatus:
     def test_start_stops_existing_process(self, mock_popen):
         pm = ProcessManager()
         pm.set_lerobot_path(Path("/tmp/fake"))
-        pm.start_teleoperate({"follower_ip": "x", "cameras": {}})
+        pm.start_teleoperate({"leader_ip": "10.0.0.1", "follower_ip": "x", "cameras": {}})
 
         proc = mock_popen._mock_proc
         proc.poll.return_value = None
 
-        pm.start_teleoperate({"follower_ip": "y", "cameras": {}})
-        proc.terminate.assert_called()
+        pm.start_teleoperate({"leader_ip": "10.0.0.2", "follower_ip": "y", "cameras": {}})
+        proc.send_signal.assert_called()

@@ -11,7 +11,7 @@ from app.services.process_manager import ProcessManager, ProcessMode, ProcessSta
 
 
 @pytest.fixture()
-def client(tmp_config_path, sample_config):
+def client(tmp_config_path, tmp_launcher_path, sample_config):
     """TestClient with patched config path and mocked singletons."""
     from app.config import save_config
 
@@ -63,6 +63,23 @@ class TestConfigEndpoints:
 
         resp3 = client.get("/api/config")
         assert resp3.json()["robot"]["leader_ip"] == "99.99.99.99"
+
+    def test_get_config_prefers_launcher_network_values(self, client, tmp_launcher_path):
+        tmp_launcher_path.write_text(json.dumps({
+            "leader_ip": "192.168.1.2",
+            "follower_ip": "192.168.1.5",
+            "pc2_wifi_ip": "192.168.2.59",
+            "pc2_ssh_user": "hadi",
+        }))
+
+        resp = client.get("/api/config")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["robot"]["leader_ip"] == "192.168.1.2"
+        assert data["robot"]["follower_ip"] == "192.168.1.5"
+        assert data["robot"]["remote_leader_host"] == "192.168.2.59"
+        assert data["robot"]["remote_leader_ssh_user"] == "hadi"
 
     def test_post_invalid_config(self, client):
         resp = client.post("/api/config", json={"robot": {"cameras": "not_a_dict"}})

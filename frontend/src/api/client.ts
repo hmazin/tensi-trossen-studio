@@ -35,6 +35,16 @@ export function getCameraStreamUrl(cameraKey: string): string {
   return `${CAMERA_API_BASE}/cameras/stream/${cameraKey}`;
 }
 
+export interface LauncherConfig {
+  pc1_wifi_ip: string;
+  pc1_ethernet_ip: string;
+  follower_ip: string;
+  pc2_wifi_ip: string;
+  pc2_ethernet_ip: string;
+  leader_ip: string;
+  pc2_ssh_user: string;
+}
+
 export interface AppConfig {
   robot: {
     leader_ip: string;
@@ -43,7 +53,7 @@ export interface AppConfig {
     remote_leader?: boolean;
     remote_leader_host?: string;
     remote_leader_port?: number;
-    cameras: Record<string, { type: string; serial_number_or_name: string; width: number; height: number; fps: number }>;
+    cameras: Record<string, { type: string; serial_number_or_name: string; width: number; height: number; fps: number; use_in_teleop?: boolean }>;
     /** Optional USB operator (HMI) camera; not used for teleop/recording */
     operator_camera?: { type: string; device_index?: number; width: number; height: number; fps: number } | null;
     /** This PC's WiFi IP (192.168.2.x) for opening Studio from another PC; set in Settings → Network */
@@ -69,6 +79,8 @@ export interface AppConfig {
     episode: number;
   };
   lerobot_trossen_path: string;
+  /** Launcher config (PC2 WiFi IP etc.) - from launcher.json, used for Leader Service Host */
+  launcher?: LauncherConfig;
 }
 
 export interface ProcessStatus {

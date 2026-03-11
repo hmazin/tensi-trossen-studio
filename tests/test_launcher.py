@@ -54,15 +54,21 @@ class TestLauncherConfig:
         cfg = launcher.load_launcher_config()
         assert cfg["pc1_wifi_ip"] == ""
         assert cfg["pc1_ethernet_ip"] == ""
+        assert cfg["follower_ip"] == "192.168.1.5"
         assert cfg["pc2_wifi_ip"] == "192.168.2.138"
-        assert cfg["pc2_ethernet_ip"] == "192.168.1.2"
+        assert cfg["pc2_ethernet_ip"] == "192.168.1.200"
+        assert cfg["leader_ip"] == "192.168.1.2"
+        assert cfg["pc2_ssh_user"] == ""
 
     def test_save_then_load_round_trip(self, tmp_config_path):
         data = {
             "pc1_wifi_ip": "192.168.2.140",
             "pc1_ethernet_ip": "192.168.1.100",
+            "follower_ip": "192.168.1.5",
             "pc2_wifi_ip": "192.168.2.138",
-            "pc2_ethernet_ip": "192.168.1.2",
+            "pc2_ethernet_ip": "192.168.1.10",
+            "leader_ip": "192.168.1.2",
+            "pc2_ssh_user": "",
         }
         launcher.save_launcher_config(data)
         loaded = launcher.load_launcher_config()
@@ -75,6 +81,14 @@ class TestLauncherConfig:
         cfg = launcher.load_launcher_config()
         assert cfg["pc1_wifi_ip"] == "10.0.0.1"
         assert cfg["pc2_wifi_ip"] == "192.168.2.138"  # default
+
+    def test_load_backward_compat_leader_ip_from_pc2_ethernet(self, tmp_config_path):
+        """Old configs with pc2_ethernet_ip but no leader_ip get leader_ip from it."""
+        tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
+        tmp_config_path.write_text('{"pc2_ethernet_ip": "192.168.1.3"}')
+        cfg = launcher.load_launcher_config()
+        assert cfg["leader_ip"] == "192.168.1.3"
+        assert cfg["pc2_ethernet_ip"] == "192.168.1.3"
 
     def test_load_corrupt_json_returns_defaults(self, tmp_config_path):
         tmp_config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -219,87 +233,102 @@ class TestFrontendStatus:
 
 
 # ---------------------------------------------------------------------------
-# 5. Constants and paths
+# 5. Shutdown helpers
+# ---------------------------------------------------------------------------
+
+class TestShutdownHelpers:
+    """Helper functions used by Stop All & Close."""
+
+    def test_post_request_success(self):
+        mock_resp = MagicMock()
+        mock_resp.getcode.return_value = 200
+        mock_resp.read.return_value = b'{"status":"ok"}'
+        mock_resp.__enter__ = MagicMock(return_value=mock_resp)
+        mock_resp.__exit__ = MagicMock(return_value=False)
+
+        with patch("urllib.request.urlopen", return_value=mock_resp):
+            ok, out = launcher._post_request("http://127.0.0.1:8000/api/process/stop")
+
+        assert ok is True
+        assert "status" in out
+
+    def test_stop_remote_leader_service_success(self):
+        with patch.object(launcher, "_ssh_run") as mock_ssh, patch("time.sleep"):
+            mock_ssh.side_effect = [
+                (0, ""),
+                (1, ""),
+            ]
+            ok, out = launcher.stop_remote_leader_service("192.168.2.59", "hadi")
+
+        assert ok is True
+        assert "stopped" in out.lower()
+
+    def test_stop_remote_leader_service_detects_still_running(self):
+        with patch.object(launcher, "_ssh_run") as mock_ssh, patch("time.sleep"):
+            mock_ssh.side_effect = [
+                (0, ""),
+                (0, "12345"),
+            ]
+            ok, out = launcher.stop_remote_leader_service("192.168.2.59", "hadi")
+
+        assert ok is False
+        assert "still running" in out.lower()
+
+
+# ---------------------------------------------------------------------------
+# 6. Constants and paths
 # ---------------------------------------------------------------------------
 
 # ---------------------------------------------------------------------------
-# 6. GUI smoke test — does the window actually build without crashing?
+# 7. GUI smoke test — does the window actually build without crashing?
 # ---------------------------------------------------------------------------
 
 class TestGUISmoke:
     """Verify the tkinter GUI initializes without errors (catches typos like padright)."""
 
     def test_gui_builds_without_error(self, tmp_config_path):
-        """Create the full GUI, then immediately destroy it. Any bad pack/grid
-        option (like 'padright') will raise TclError here."""
+        """Build the real launcher UI and assert key sections are present."""
         import tkinter as tk
 
-        # Patch network/subprocess calls so we don't hit real services
         with patch.object(launcher, "detect_pc1_ips", return_value=("192.168.2.140", "192.168.1.100")), \
              patch.object(launcher, "backend_status", return_value=False), \
              patch.object(launcher, "frontend_status", return_value=False):
 
             root = tk.Tk()
-            root.withdraw()  # don't show the window
+            root.withdraw()
             try:
-                from tkinter import ttk, messagebox
+                built = launcher.build_launcher_ui(root)
+                notebook = built["notebook"]
+                tab_texts = [notebook.tab(tab_id, "text") for tab_id in notebook.tabs()]
+                assert tab_texts == ["Services", "Network", "Tools"]
+                assert root.title() == "TENSI Trossen Studio - Launcher (PC1)"
 
-                config = launcher.load_launcher_config()
-                pc1_wifi, pc1_eth = launcher.detect_pc1_ips()
-                if not config.get("pc1_wifi_ip") and pc1_wifi:
-                    config["pc1_wifi_ip"] = pc1_wifi
-                if not config.get("pc1_ethernet_ip") and pc1_eth:
-                    config["pc1_ethernet_ip"] = pc1_eth
+                widget_texts = []
 
-                main = ttk.Frame(root, padding=12)
-                main.pack(fill=tk.BOTH, expand=True)
+                def walk(widget):
+                    yield widget
+                    for child in widget.winfo_children():
+                        yield from walk(child)
 
-                # --- 1. Backend ---
-                ttk.Label(main, text="1. Backend", font=("", 11, "bold")).pack(anchor=tk.W)
-                be_frame = ttk.Frame(main)
-                be_frame.pack(fill=tk.X, pady=(4, 12))
-                be_status_var = tk.StringVar(value="Checking…")
-                ttk.Label(be_frame, textvariable=be_status_var, width=24).pack(side=tk.LEFT, padx=8)
-                ttk.Button(be_frame, text="Start backend").pack(side=tk.LEFT, padx=4)
-                ttk.Button(be_frame, text="Stop backend").pack(side=tk.LEFT)
+                for widget in walk(root):
+                    try:
+                        text = widget.cget("text")
+                    except Exception:
+                        continue
+                    if text:
+                        widget_texts.append(text)
 
-                # --- 2. Frontend ---
-                ttk.Label(main, text="2. Frontend", font=("", 11, "bold")).pack(anchor=tk.W, pady=(8, 0))
-                fe_frame = ttk.Frame(main)
-                fe_frame.pack(fill=tk.X, pady=(4, 12))
-                fe_status_var = tk.StringVar(value="Checking…")
-                ttk.Label(fe_frame, textvariable=fe_status_var, width=24).pack(side=tk.LEFT, padx=8)
-                ttk.Button(fe_frame, text="Start frontend").pack(side=tk.LEFT, padx=4)
-                ttk.Button(fe_frame, text="Stop frontend").pack(side=tk.LEFT)
-
-                # --- 3. PC1 IPs ---
-                ttk.Label(main, text="3. PC1 IPs", font=("", 11, "bold")).pack(anchor=tk.W, pady=(8, 0))
-                p1_frame = ttk.Frame(main)
-                p1_frame.pack(fill=tk.X, pady=(4, 12))
-                ttk.Label(p1_frame, text="WiFi (192.168.2.x):", width=20, anchor=tk.W).pack(anchor=tk.W)
-                pc1_wifi_var = tk.StringVar(value=config.get("pc1_wifi_ip", ""))
-                ttk.Entry(p1_frame, textvariable=pc1_wifi_var, width=18).pack(anchor=tk.W, pady=2)
-                ttk.Label(p1_frame, text="Ethernet (192.168.1.x):", width=20, anchor=tk.W).pack(anchor=tk.W, pady=(6, 0))
-                pc1_eth_var = tk.StringVar(value=config.get("pc1_ethernet_ip", ""))
-                ttk.Entry(p1_frame, textvariable=pc1_eth_var, width=18).pack(anchor=tk.W, pady=2)
-
-                # --- 4. PC2 IPs ---
-                ttk.Label(main, text="4. PC2 IPs", font=("", 11, "bold")).pack(anchor=tk.W, pady=(8, 0))
-                p2_frame = ttk.Frame(main)
-                p2_frame.pack(fill=tk.X, pady=(4, 12))
-                ttk.Label(p2_frame, text="WiFi (192.168.2.x):", width=20, anchor=tk.W).pack(anchor=tk.W)
-                pc2_wifi_var = tk.StringVar(value=config.get("pc2_wifi_ip", "192.168.2.138"))
-                ttk.Entry(p2_frame, textvariable=pc2_wifi_var, width=18).pack(anchor=tk.W, pady=2)
-                ttk.Label(p2_frame, text="Ethernet (192.168.1.x):", width=20, anchor=tk.W).pack(anchor=tk.W, pady=(6, 0))
-                pc2_eth_var = tk.StringVar(value=config.get("pc2_ethernet_ip", "192.168.1.2"))
-                ttk.Entry(p2_frame, textvariable=pc2_eth_var, width=18).pack(anchor=tk.W, pady=2)
-
-                # --- Save + Open ---
-                ttk.Button(main, text="Save IPs").pack(anchor=tk.W, pady=(8, 0))
-                ttk.Separator(main, orient=tk.HORIZONTAL).pack(fill=tk.X, pady=16)
-                ttk.Button(main, text="Open Studio in browser").pack(anchor=tk.W)
-                ttk.Label(main, text="  (http://127.0.0.1:5173)", foreground="gray").pack(anchor=tk.W)
-
+                for expected in (
+                    "Start backend",
+                    "Stop backend",
+                    "Start frontend",
+                    "Open frontend",
+                    "Save IPs",
+                    "Setup PC2 and start leader",
+                    "Scan USB cameras",
+                    "Stop All & Close",
+                ):
+                    assert expected in widget_texts
             finally:
                 root.destroy()
 
@@ -340,7 +369,7 @@ class TestGUISmoke:
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-                    be_status_var.set("Starting…")
+                    be_status_var.set("Starting...")
 
                 def stop_backend():
                     if procs["backend"] is not None:
@@ -358,7 +387,7 @@ class TestGUISmoke:
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                     )
-                    fe_status_var.set("Starting…")
+                    fe_status_var.set("Starting...")
 
                 def stop_frontend():
                     if procs["frontend"] is not None:
@@ -370,7 +399,7 @@ class TestGUISmoke:
                 # Run all callbacks — any NameError / scope bug will raise here
                 start_backend()
                 assert procs["backend"] is not None
-                assert be_status_var.get() == "Starting…"
+                assert be_status_var.get() == "Starting..."
 
                 stop_backend()
                 assert procs["backend"] is None
@@ -378,7 +407,7 @@ class TestGUISmoke:
 
                 start_frontend()
                 assert procs["frontend"] is not None
-                assert fe_status_var.get() == "Starting…"
+                assert fe_status_var.get() == "Starting..."
 
                 stop_frontend()
                 assert procs["frontend"] is None
@@ -409,6 +438,12 @@ class TestGUISmoke:
                 assert kw in VALID_PACK_OPTIONS, (
                     f"Invalid .pack() option '{kw}' in: .pack({call})"
                 )
+
+    def test_launcher_source_uses_ascii_safe_ui_text(self):
+        import re
+
+        source = Path(launcher.__file__).read_text()
+        assert re.search(r"[—…→]", source) is None
 
 
 class TestConstants:

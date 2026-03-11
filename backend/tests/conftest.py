@@ -17,6 +17,14 @@ def tmp_config_path(tmp_path: Path):
         yield config_file
 
 
+@pytest.fixture(autouse=True)
+def tmp_launcher_path(tmp_path: Path):
+    """Patch get_launcher_config_path() to use a temp directory."""
+    launcher_file = tmp_path / "launcher.json"
+    with patch("app.config.get_launcher_config_path", return_value=launcher_file):
+        yield launcher_file
+
+
 @pytest.fixture()
 def sample_config() -> AppConfig:
     """Return a fully-populated AppConfig with known test values."""
@@ -26,9 +34,16 @@ def sample_config() -> AppConfig:
             follower_ip="10.0.0.2",
             use_top_camera_only=False,
             cameras={
-                "wrist": {
+                "left_wrist": {
                     "type": "intelrealsense",
-                    "serial_number_or_name": "WRIST_SERIAL",
+                    "serial_number_or_name": "LEFT_WRIST_SERIAL",
+                    "width": 640,
+                    "height": 480,
+                    "fps": 30,
+                },
+                "right_wrist": {
+                    "type": "intelrealsense",
+                    "serial_number_or_name": "RIGHT_WRIST_SERIAL",
                     "width": 640,
                     "height": 480,
                     "fps": 30,

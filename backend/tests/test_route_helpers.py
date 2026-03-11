@@ -17,7 +17,8 @@ class TestRobotConfig:
 
         assert result["leader_ip"] == "10.0.0.1"
         assert result["follower_ip"] == "10.0.0.2"
-        assert "wrist" in result["cameras"]
+        assert "left_wrist" in result["cameras"]
+        assert "right_wrist" in result["cameras"]
         assert "top" in result["cameras"]
         assert "remote_leader" not in result
 
@@ -34,15 +35,17 @@ class TestRobotConfig:
             result = _robot_config(use_top_camera_only=True)
 
         assert list(result["cameras"].keys()) == ["wrist"]
-        assert result["cameras"]["wrist"]["serial_number_or_name"] == "TOP_SERIAL"
+        assert result["cameras"]["wrist"]["serial_number_or_name"] == "TOP_SERIAL"  # top mapped to wrist when use_top_camera_only
 
     def test_both_cameras(self, sample_config):
         with patch("app.routes.process_routes.load_config", return_value=sample_config):
             result = _robot_config(use_top_camera_only=False)
 
-        assert "wrist" in result["cameras"]
+        assert "left_wrist" in result["cameras"]
+        assert "right_wrist" in result["cameras"]
         assert "top" in result["cameras"]
-        assert result["cameras"]["wrist"]["serial_number_or_name"] == "WRIST_SERIAL"
+        assert result["cameras"]["left_wrist"]["serial_number_or_name"] == "LEFT_WRIST_SERIAL"
+        assert result["cameras"]["right_wrist"]["serial_number_or_name"] == "RIGHT_WRIST_SERIAL"
         assert result["cameras"]["top"]["serial_number_or_name"] == "TOP_SERIAL"
 
     def test_uses_config_default_for_top_camera_only(self, sample_config):
@@ -51,6 +54,23 @@ class TestRobotConfig:
             result = _robot_config()
 
         assert list(result["cameras"].keys()) == ["wrist"]
+
+    def test_use_in_teleop_false_excludes_camera(self, sample_config):
+        sample_config.robot.cameras["right_wrist"]["use_in_teleop"] = False
+        with patch("app.routes.process_routes.load_config", return_value=sample_config):
+            result = _robot_config(use_top_camera_only=False)
+
+        assert set(result["cameras"].keys()) == {"left_wrist", "top"}
+        assert "use_in_teleop" not in result["cameras"]["top"]
+
+    def test_use_in_teleop_false_all_gives_empty_cameras(self, sample_config):
+        sample_config.robot.cameras["left_wrist"]["use_in_teleop"] = False
+        sample_config.robot.cameras["right_wrist"]["use_in_teleop"] = False
+        sample_config.robot.cameras["top"]["use_in_teleop"] = False
+        with patch("app.routes.process_routes.load_config", return_value=sample_config):
+            result = _robot_config(use_top_camera_only=False)
+
+        assert result["cameras"] == {}
 
 
 class TestDatasetConfig:

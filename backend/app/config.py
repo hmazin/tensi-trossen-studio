@@ -12,6 +12,41 @@ def get_config_path() -> Path:
     return Path.home() / ".tensi_trossen_studio" / "config.json"
 
 
+def get_launcher_config_path() -> Path:
+    """Return path to launcher config (shared with launcher.py)."""
+    return Path.home() / ".tensi_trossen_studio" / "launcher.json"
+
+
+def load_launcher_config() -> dict:
+    """Load launcher config from launcher.json. Used for Leader Service Host etc."""
+    default = {
+        "pc1_wifi_ip": "",
+        "pc1_ethernet_ip": "",
+        "follower_ip": "192.168.1.5",
+        "pc2_wifi_ip": "192.168.2.138",
+        "pc2_ethernet_ip": "192.168.1.200",
+        "leader_ip": "192.168.1.2",
+        "pc2_ssh_user": "",
+    }
+    path = get_launcher_config_path()
+    if not path.exists():
+        return default
+    try:
+        data = json.loads(path.read_text())
+        return {**default, **data}
+    except Exception:
+        return default
+
+
+def save_launcher_config(updates: dict) -> None:
+    """Merge updates into launcher.json and save."""
+    path = get_launcher_config_path()
+    current = load_launcher_config()
+    current.update(updates)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(current, indent=2))
+
+
 class CameraConfig(BaseModel):
     """Single camera configuration."""
 
@@ -32,9 +67,16 @@ class RobotConfig(BaseModel):
         default=True,
     )
     cameras: dict[str, dict[str, Any]] = Field(
-        description="Camera config dict, e.g. {wrist: {...}, top: {...}}",
+        description="Camera config dict, e.g. {left_wrist: {...}, right_wrist: {...}, top: {...}}",
         default_factory=lambda: {
-            "wrist": {
+            "left_wrist": {
+                "type": "intelrealsense",
+                "serial_number_or_name": "218622276325",
+                "width": 640,
+                "height": 480,
+                "fps": 30,
+            },
+            "right_wrist": {
                 "type": "intelrealsense",
                 "serial_number_or_name": "218622275782",
                 "width": 640,
@@ -126,7 +168,14 @@ class AppConfig(BaseModel):
 
 
 DEFAULT_CAMERAS = {
-    "wrist": {
+    "left_wrist": {
+        "type": "intelrealsense",
+        "serial_number_or_name": "218622276325",
+        "width": 640,
+        "height": 480,
+        "fps": 30,
+    },
+    "right_wrist": {
         "type": "intelrealsense",
         "serial_number_or_name": "218622275782",
         "width": 640,
@@ -143,6 +192,37 @@ DEFAULT_CAMERAS = {
 }
 
 
+def _ensure_camera_slots(cfg: AppConfig) -> AppConfig:
+    """Ensure left_wrist, right_wrist, and top camera slots exist for Camera Viewer. Migrate old 'wrist' to right_wrist and drop wrist."""
+    cameras = cfg.robot.cameras or {}
+    if "wrist" in cameras and "right_wrist" not in cameras:
+        cameras = {**cameras, "right_wrist": {**cameras["wrist"]}}
+    # Remove legacy "wrist" key so it does not show as redundant in the UI
+    if "wrist" in cameras:
+        cameras = {k: v for k, v in cameras.items() if k != "wrist"}
+    for key in ("left_wrist", "right_wrist", "top"):
+        if key not in cameras:
+            cameras = {**cameras, key: DEFAULT_CAMERAS[key].copy()}
+    cfg.robot.cameras = cameras
+    return cfg
+
+
+def _apply_launcher_overrides(cfg: AppConfig) -> AppConfig:
+    """Use launcher.json as the source of truth for runtime network settings."""
+    if not get_launcher_config_path().exists():
+        return cfg
+    launcher = load_launcher_config()
+    if launcher.get("leader_ip"):
+        cfg.robot.leader_ip = str(launcher["leader_ip"]).strip()
+    if launcher.get("follower_ip"):
+        cfg.robot.follower_ip = str(launcher["follower_ip"]).strip()
+    if launcher.get("pc2_wifi_ip"):
+        cfg.robot.remote_leader_host = str(launcher["pc2_wifi_ip"]).strip()
+    if launcher.get("pc2_ssh_user"):
+        cfg.robot.remote_leader_ssh_user = str(launcher["pc2_ssh_user"]).strip()
+    return cfg
+
+
 def load_config() -> AppConfig:
     """Load config from disk, or return defaults if not found."""
     path = get_config_path()
@@ -150,16 +230,10 @@ def load_config() -> AppConfig:
         try:
             data = json.loads(path.read_text())
             cfg = AppConfig.model_validate(data)
-            # Ensure both wrist and top camera slots exist for Camera Viewer
-            cameras = cfg.robot.cameras or {}
-            for key in ("wrist", "top"):
-                if key not in cameras:
-                    cameras = {**cameras, key: DEFAULT_CAMERAS[key].copy()}
-            cfg.robot.cameras = cameras
-            return cfg
+            return _apply_launcher_overrides(_ensure_camera_slots(cfg))
         except Exception:
             pass
-    return AppConfig()
+    return _apply_launcher_overrides(_ensure_camera_slots(AppConfig()))
 
 
 def save_config(config: AppConfig) -> None:
