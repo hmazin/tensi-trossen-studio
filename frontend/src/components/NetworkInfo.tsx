@@ -82,6 +82,14 @@ export function NetworkInfo({ config, open, onClose, anchorRef, onOpenSettings }
               Set in Settings → Network (Studio host for other PCs)
             </p>
           )}
+          {shareUrl && (
+            <div>
+              <p className="mb-1 text-xs text-gray-500">Operator view (full-screen camera + start/stop)</p>
+              <code className="block truncate rounded bg-gray-800 px-2 py-1.5 text-xs text-emerald-300">
+                {shareUrl}/operator
+              </code>
+            </div>
+          )}
           {onOpenSettings && (
             <button
               type="button"

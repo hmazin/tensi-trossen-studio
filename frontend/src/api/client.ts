@@ -1,8 +1,17 @@
-const API_BASE = import.meta.env.VITE_API_BASE || '/api';
-const CAMERA_API_BASE = import.meta.env.VITE_CAMERA_API_BASE || API_BASE;
+function getApiBase(): string {
+  const env = import.meta.env.VITE_API_BASE;
+  if (env && typeof env === 'string' && env.startsWith('http')) return env;
+  if (typeof window !== 'undefined') return `${window.location.origin}${env || '/api'}`;
+  return env || '/api';
+}
+function getCameraApiBase(): string {
+  const env = import.meta.env.VITE_CAMERA_API_BASE;
+  if (env && typeof env === 'string' && env.startsWith('http')) return env;
+  return env || getApiBase();
+}
 
 async function fetchApi(path: string, options?: RequestInit) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getApiBase()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -17,7 +26,7 @@ async function fetchApi(path: string, options?: RequestInit) {
 }
 
 async function fetchCameraApi(path: string, options?: RequestInit) {
-  const res = await fetch(`${CAMERA_API_BASE}${path}`, {
+  const res = await fetch(`${getCameraApiBase()}${path}`, {
     ...options,
     headers: {
       'Content-Type': 'application/json',
@@ -32,7 +41,7 @@ async function fetchCameraApi(path: string, options?: RequestInit) {
 }
 
 export function getCameraStreamUrl(cameraKey: string): string {
-  return `${CAMERA_API_BASE}/cameras/stream/${cameraKey}`;
+  return `${getCameraApiBase()}/cameras/stream/${cameraKey}`;
 }
 
 export interface LauncherConfig {

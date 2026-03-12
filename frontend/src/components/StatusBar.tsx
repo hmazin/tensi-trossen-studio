@@ -75,6 +75,15 @@ export function StatusBar({ config, status, onSettingsClick }: StatusBarProps) {
           )}
         </div>
         <div className="relative flex items-center gap-1">
+          <a
+            href="/operator"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg border border-gray-700 bg-gray-800/80 px-3 py-2 text-xs text-gray-400 transition hover:border-gray-500 hover:text-white"
+            title="Open operator view (camera + start/stop) in new tab"
+          >
+            Operator view
+          </a>
           <button
             ref={networkAnchorRef}
             type="button"
